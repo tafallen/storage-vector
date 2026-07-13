@@ -6,12 +6,16 @@ This document provides a deep technical debt review of the `Storage.Vector` libr
 
 ## 1. Summary of Identified Technical Debt
 
-| Area | Issue Description | Severity | Impact |
-|---|---|---|---|
-| **Usability / Coupling** | Hardcoded presigned URL route (`/api/v1/media/local-file/`) in `LocalFileStorageProvider` | High | Couples the library to the specific controller route of the FAMTree API, reducing reusability in other apps. |
-| **Performance** | Synchronous file creation/opening in `LocalFileStorageProvider` before streaming | Medium | Blocks thread-pool threads during I/O initialization on high-throughput deployments. |
-| **Stability** | TOCTOU (Time-of-Check to Time-of-Use) race condition in file access | Medium | Possibility of a file being deleted or locked between `File.Exists` and `File.OpenRead` calls. |
-| **Usability** | Suppressed compiler warnings (`CS1591`) for missing XML documentation comments | Low | Missing IDE IntelliSense guidance for developers consuming the library. |
+| Area | Issue Description | Severity | Impact | Status |
+|---|---|---|---|---|
+| **Usability / Coupling** | Hardcoded presigned URL route (`/api/v1/media/local-file/`) in `LocalFileStorageProvider` | High | Couples the library to the specific controller route of the FAMTree API, reducing reusability in other apps. | **Resolved** (in v1.0.1 via `LocalFileDownloadRoute`) |
+| **Performance** | Synchronous file creation/opening in `LocalFileStorageProvider` before streaming | Medium | Blocks thread-pool threads during I/O initialization on high-throughput deployments. | **Resolved** (in v1.0.1 via async `FileStream` constructors) |
+| **Stability** | TOCTOU (Time-of-Check to Time-of-Use) race condition in file access | Medium | Possibility of a file being deleted or locked between `File.Exists` and `File.OpenRead` calls. | **Resolved** (in v1.0.1 by opening directly inside `try-catch`) |
+| **Usability** | Suppressed compiler warnings (`CS1591`) for missing XML documentation comments | Low | Missing IDE IntelliSense guidance for developers consuming the library. | **Resolved** (in v1.0.1 by adding comments & removing warning suppression) |
+| **Stability / Cloud** | Azure SAS token generation assumes Shared Access Keys connection strings | High | Crashes under TokenCredential/Managed Identity setups. | **Resolved** (in v1.0.2 via User Delegation SAS fallback) |
+| **Performance** | Hardcoded FileStream buffer sizes (`4KB`) | Medium | High OS syscall overhead on large file transfers. | **Resolved** (in v1.0.2 via configurable `BufferSize` option, default `64KB`) |
+| **Usability** | URL signature verification requires manual instantiation of `LocalFileUrlSigner` | Medium | Leaks verification details into controller-level logic. | **Resolved** (in v1.0.2 via `IStorageProvider.VerifyPresignedUrl`) |
+| **Security** | Missing argument validation for container and key names | High | Invalid/empty arguments could cause undefined directory resolution. | **Resolved** (in v1.0.2 via strict guard checks in `LocalFilePathResolver`) |
 
 ---
 
