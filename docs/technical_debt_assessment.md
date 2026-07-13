@@ -89,3 +89,22 @@ In `Storage.Vector.csproj`:
 ```
 **Problem**: Public classes like `IStorageProvider`, `StorageException`, and options are undocumented in code, forcing developers to look up README markdown files rather than receiving inline documentation in their IDE.
 **Resolution**: Write high-quality XML comments for all public structures and remove the `CS1591` warning suppression to enforce documentation coverage.
+
+---
+
+## 3. Secondary Tech Debt & Future Improvement Candidates
+
+Additionally, the following secondary architectural and performance items have surfaced:
+
+### Finding 5: Azure Token-Credential (Managed Identity) Support Gaps
+* **Problem**: In `AzureBlobStorageProvider.GetPresignedUrlAsync`, the code calls `blobClient.GenerateSasUri(...)` directly. This method throws an `InvalidOperationException` if the `BlobServiceClient` is authenticated using Microsoft Entra ID (Managed Identity / `TokenCredential`) instead of a Shared Access Key connection string. To generate SAS URIs securely using token credentials, the provider must request a **User Delegation Key** first.
+* **Resolution**: Enhance `GetPresignedUrlAsync` to detect if the service client can acquire a user delegation key, or allow configuring SAS parameters for token credentials.
+
+### Finding 6: Hardcoded FileStream Buffer Sizes
+* **Problem**: `LocalFileStorageProvider` hardcodes `bufferSize: 4096` in `FileStream` allocations. For high-throughput servers streaming media files (e.g. video files, large backups), a `4KB` buffer causes excessive OS syscall overhead. 
+* **Resolution**: Elevate the default buffer size to `64KB` (`65536` bytes), or expose it as a configurable parameter (`BufferSize`) in `StorageOptions`.
+
+### Finding 7: Signature Verification Usability Gap
+* **Problem**: `LocalFileUrlSigner` is a static helper class. In ASP.NET Core controllers, developers are forced to manually construct it and pass the `SigningKey` from injected options. This leaks details of signature verification into application-level code.
+* **Resolution**: Expose a verification abstraction (e.g. `bool VerifyPresignedUrl(string url)`) directly on `IStorageProvider` or introduce an `IUrlSigner` interface, letting the DI container resolve the provider and sign/verify seamlessly.
+
