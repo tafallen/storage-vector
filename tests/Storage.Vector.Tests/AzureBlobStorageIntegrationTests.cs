@@ -6,7 +6,6 @@ using Xunit;
 
 namespace Storage.Vector.Tests;
 
-[Collection("Neo4jIntegration")]
 public class AzureBlobStorageIntegrationTests
 {
     private const string Container = "famtree-media-integration-test";
