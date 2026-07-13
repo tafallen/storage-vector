@@ -1,6 +1,6 @@
 # Storage.Vector
 
-A portable **.NET 8** storage provider abstraction and implementations for Azure Blob Storage and Local Filesystem. Supports secondary/backup storage mirroring, presigned download URLs, path traversal protection, and validation.
+A portable **.NET 8** storage provider abstraction and implementations for Azure Blob Storage (including local Azurite emulation) and Local Filesystem (supporting local directories, NAS, and SMB/NFS mounts). Supports secondary/backup storage mirroring, presigned download URLs, path traversal protection, and validation.
 
 [![CI](https://github.com/tafallen/storage-vector/actions/workflows/ci.yml/badge.svg)](https://github.com/tafallen/storage-vector/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/Storage.Vector)](https://www.nuget.org/packages/Storage.Vector)
@@ -10,7 +10,8 @@ A portable **.NET 8** storage provider abstraction and implementations for Azure
 
 ## Features
 
-- 📁 **Unified interface** — swap between local filesystem and cloud providers purely via configuration
+- 📁 **Unified interface** — swap between local directories, NAS, and cloud providers purely via configuration
+- ☁️ **Azurite & Azure support** — fully compatible with local Azurite emulator for dev/testing and cloud Azure Blob Storage
 - 🔒 **Path traversal protection** — local provider containment checks prevent directory breakout attacks
 - 👯 **Keyed secondary mirroring** — configure and inject independent backup/sync storage targets via keyed DI
 - 🔑 **Presigned URLs** — generate signed download URLs (HMAC-SHA256 signatures for LocalFile, SAS tokens for Azure)
