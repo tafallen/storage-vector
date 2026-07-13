@@ -53,6 +53,12 @@ public class StorageOptions
     public string LocalFileDownloadRoute { get; set; } = "api/v1/media/local-file";
 
     /// <summary>
+    /// The buffer size in bytes used when reading and writing files asynchronously on the local filesystem (used only when Provider is "LocalFile").
+    /// Defaults to 65536 bytes (64KB).
+    /// </summary>
+    public int BufferSize { get; set; } = 65536;
+
+    /// <summary>
     /// Gating flag to control whether a secondary storage provider is registered under the keyed slot "secondary".
     /// </summary>
     public bool SyncEnabled { get; set; } = false;

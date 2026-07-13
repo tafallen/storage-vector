@@ -37,9 +37,9 @@ public class LocalFileStorageProvider : IStorageProvider
                 FileMode.Create,
                 FileAccess.Write,
                 FileShare.None,
-                bufferSize: 4096,
+                bufferSize: _options.BufferSize,
                 useAsync: true);
-            await data.CopyToAsync(dest, ct);
+            await data.CopyToAsync(dest, _options.BufferSize, ct);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -85,7 +85,7 @@ public class LocalFileStorageProvider : IStorageProvider
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read,
-                bufferSize: 4096,
+                bufferSize: _options.BufferSize,
                 useAsync: true);
             return Task.FromResult(stream);
         }
@@ -137,6 +137,67 @@ public class LocalFileStorageProvider : IStorageProvider
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public bool VerifyPresignedUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var query = uri.Query.TrimStart('?').Split('&');
+            string? expiresStr = null;
+            string? sig = null;
+
+            foreach (var part in query)
+            {
+                var kv = part.Split('=');
+                if (kv.Length == 2)
+                {
+                    if (kv[0] == "expires") expiresStr = Uri.UnescapeDataString(kv[1]);
+                    else if (kv[0] == "sig") sig = Uri.UnescapeDataString(kv[1]);
+                }
+            }
+
+            if (string.IsNullOrEmpty(expiresStr) || string.IsNullOrEmpty(sig))
+            {
+                return false;
+            }
+
+            if (!long.TryParse(expiresStr, out var expiresAt))
+            {
+                return false;
+            }
+
+            if (DateTimeOffset.FromUnixTimeSeconds(expiresAt) <= DateTimeOffset.UtcNow)
+            {
+                return false;
+            }
+
+            // Extract container and key from the path
+            var route = _options.LocalFileDownloadRoute.Trim('/');
+            var path = Uri.UnescapeDataString(uri.AbsolutePath).Trim('/');
+            
+            if (path.StartsWith(route, StringComparison.OrdinalIgnoreCase))
+            {
+                path = path.Substring(route.Length).Trim('/');
+            }
+
+            var firstSlash = path.IndexOf('/');
+            if (firstSlash <= 0)
+            {
+                return false;
+            }
+
+            var container = path.Substring(0, firstSlash);
+            var key = path.Substring(firstSlash + 1);
+
+            return LocalFileUrlSigner.Verify(_options.SigningKey!, container, key, expiresAt, sig);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private string ResolvePath(string container, string key) =>

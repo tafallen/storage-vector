@@ -172,6 +172,7 @@ public static class StorageServiceCollectionExtensions
             SigningKey = secondary.SigningKey,
             PublicBaseUrl = secondary.PublicBaseUrl,
             LocalFileDownloadRoute = secondary.LocalFileDownloadRoute,
+            BufferSize = secondary.BufferSize,
         });
 
     private static bool IsValidConnectionString(string? connectionString)

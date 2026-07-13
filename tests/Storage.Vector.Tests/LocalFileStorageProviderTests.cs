@@ -166,6 +166,72 @@ public class LocalFileStorageProviderTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_rootPath, "famtree-media")));
     }
 
+    [Fact]
+    public async Task PutObjectAsync_EmptyContainer_ThrowsArgumentException()
+    {
+        var provider = CreateProvider();
+        using var data = new MemoryStream(new byte[] { 1 });
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => provider.PutObjectAsync("", "file.jpg", data, "image/jpeg", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PutObjectAsync_EmptyKey_ThrowsArgumentException()
+    {
+        var provider = CreateProvider();
+        using var data = new MemoryStream(new byte[] { 1 });
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => provider.PutObjectAsync("container", " ", data, "image/jpeg", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task VerifyPresignedUrl_ValidUrl_ReturnsTrue()
+    {
+        var provider = CreateProvider(signingKey: "test-signing-key");
+        using var data = new MemoryStream(new byte[] { 1, 2, 3 });
+        await provider.PutObjectAsync("famtree-media", "events/E001/cert.jpg", data, "image/jpeg", CancellationToken.None);
+
+        var url = await provider.GetPresignedUrlAsync("famtree-media", "events/E001/cert.jpg", TimeSpan.FromMinutes(15), CancellationToken.None);
+
+        var isValid = provider.VerifyPresignedUrl(url.ToString());
+
+        Assert.True(isValid);
+    }
+
+    [Fact]
+    public async Task VerifyPresignedUrl_ExpiredUrl_ReturnsFalse()
+    {
+        var provider = CreateProvider(signingKey: "test-signing-key");
+        using var data = new MemoryStream(new byte[] { 1, 2, 3 });
+        await provider.PutObjectAsync("famtree-media", "events/E001/cert.jpg", data, "image/jpeg", CancellationToken.None);
+
+        // Compute an expired URL directly (expires 10 seconds ago)
+        var expiresAt = DateTimeOffset.UtcNow.AddSeconds(-10).ToUnixTimeSeconds();
+        var signature = LocalFileUrlSigner.Compute("test-signing-key", "famtree-media", "events/E001/cert.jpg", expiresAt);
+        var url = $"http://localhost:8080/api/v1/media/local-file/famtree-media/events/E001/cert.jpg?expires={expiresAt}&sig={signature}";
+
+        var isValid = provider.VerifyPresignedUrl(url);
+
+        Assert.False(isValid);
+    }
+
+    [Fact]
+    public async Task VerifyPresignedUrl_TamperedUrl_ReturnsFalse()
+    {
+        var provider = CreateProvider(signingKey: "test-signing-key");
+        using var data = new MemoryStream(new byte[] { 1, 2, 3 });
+        await provider.PutObjectAsync("famtree-media", "events/E001/cert.jpg", data, "image/jpeg", CancellationToken.None);
+
+        var url = await provider.GetPresignedUrlAsync("famtree-media", "events/E001/cert.jpg", TimeSpan.FromMinutes(15), CancellationToken.None);
+        var tamperedUrl = url.ToString().Replace("E001", "E002"); // Tamper key
+
+        var isValid = provider.VerifyPresignedUrl(tamperedUrl);
+
+        Assert.False(isValid);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_rootPath))

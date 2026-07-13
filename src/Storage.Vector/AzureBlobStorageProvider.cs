@@ -46,7 +46,7 @@ public class AzureBlobStorageProvider : IStorageProvider
     }
 
     /// <inheritdoc />
-    public Task<Uri> GetPresignedUrlAsync(string container, string key, TimeSpan expiry, CancellationToken ct)
+    public async Task<Uri> GetPresignedUrlAsync(string container, string key, TimeSpan expiry, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
@@ -55,8 +55,39 @@ public class AzureBlobStorageProvider : IStorageProvider
         try
         {
             var blobClient = _service.GetBlobContainerClient(container).GetBlobClient(key);
-            var uri = blobClient.GenerateSasUri(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add(cappedExpiry));
-            return Task.FromResult(RewriteToPublicEndpoint(uri));
+            Uri uri;
+
+            if (blobClient.CanGenerateSasUri)
+            {
+                // Simple shared-key signature
+                uri = blobClient.GenerateSasUri(BlobSasPermissions.Read, DateTimeOffset.UtcNow.Add(cappedExpiry));
+            }
+            else
+            {
+                // Entra ID TokenCredential flow: generate a User Delegation SAS
+                var now = DateTimeOffset.UtcNow;
+                var startsOn = now.AddMinutes(-5); // Buffer for clock skew
+                var expiresOn = now.Add(cappedExpiry);
+
+                var userDelegationKey = await _service.GetUserDelegationKeyAsync(startsOn, expiresOn, cancellationToken: ct);
+
+                var sasBuilder = new BlobSasBuilder(BlobSasPermissions.Read, expiresOn)
+                {
+                    BlobContainerName = container,
+                    BlobName = key,
+                    Resource = "b",
+                    StartsOn = startsOn
+                };
+
+                var blobUriBuilder = new BlobUriBuilder(blobClient.Uri)
+                {
+                    Sas = sasBuilder.ToSasQueryParameters(userDelegationKey.Value, _service.AccountName)
+                };
+
+                uri = blobUriBuilder.ToUri();
+            }
+
+            return RewriteToPublicEndpoint(uri);
         }
         catch (RequestFailedException ex)
         {
@@ -122,6 +153,34 @@ public class AzureBlobStorageProvider : IStorageProvider
         catch (RequestFailedException ex)
         {
             throw StorageException.FromAzureException(ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public bool VerifyPresignedUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var query = uri.Query.TrimStart('?').Split('&');
+            foreach (var part in query)
+            {
+                var kv = part.Split('=');
+                if (kv.Length == 2 && kv[0] == "se")
+                {
+                    var decoded = Uri.UnescapeDataString(kv[1]);
+                    if (DateTimeOffset.TryParse(decoded, out var expiry))
+                    {
+                        return expiry > DateTimeOffset.UtcNow;
+                    }
+                }
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 }

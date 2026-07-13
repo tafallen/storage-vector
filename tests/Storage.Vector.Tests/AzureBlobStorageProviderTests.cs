@@ -52,6 +52,7 @@ public class AzureBlobStorageProviderTests
         var mockService = new Mock<BlobServiceClient>();
         var mockContainer = new Mock<BlobContainerClient>();
         var mockBlob = new Mock<BlobClient>();
+        mockBlob.Setup(b => b.CanGenerateSasUri).Returns(true);
 
         mockService.Setup(s => s.GetBlobContainerClient("famtree-media")).Returns(mockContainer.Object);
         mockContainer.Setup(c => c.GetBlobClient("events/E001/cert.jpg")).Returns(mockBlob.Object);
@@ -116,6 +117,7 @@ public class AzureBlobStorageProviderTests
         var mockService = new Mock<BlobServiceClient>();
         var mockContainer = new Mock<BlobContainerClient>();
         var mockBlob = new Mock<BlobClient>();
+        mockBlob.Setup(b => b.CanGenerateSasUri).Returns(true);
         DateTimeOffset capturedExpiry = default;
 
         mockService.Setup(s => s.GetBlobContainerClient("famtree-media")).Returns(mockContainer.Object);
@@ -182,6 +184,7 @@ public class AzureBlobStorageProviderTests
         var mockService = new Mock<BlobServiceClient>();
         var mockContainer = new Mock<BlobContainerClient>();
         var mockBlob = new Mock<BlobClient>();
+        mockBlob.Setup(b => b.CanGenerateSasUri).Returns(true);
 
         mockService.Setup(s => s.GetBlobContainerClient("famtree-media")).Returns(mockContainer.Object);
         mockContainer.Setup(c => c.GetBlobClient("events/E001/cert.jpg")).Returns(mockBlob.Object);
@@ -207,6 +210,7 @@ public class AzureBlobStorageProviderTests
         var mockService = new Mock<BlobServiceClient>();
         var mockContainer = new Mock<BlobContainerClient>();
         var mockBlob = new Mock<BlobClient>();
+        mockBlob.Setup(b => b.CanGenerateSasUri).Returns(true);
 
         var sdkUri = new Uri("http://storage:10000/devstoreaccount1/famtree-media/events/E001/cert.jpg?sig=xyz&se=2026-01-01");
 
@@ -221,6 +225,35 @@ public class AzureBlobStorageProviderTests
         var result = await provider.GetPresignedUrlAsync("famtree-media", "events/E001/cert.jpg", TimeSpan.FromMinutes(15), CancellationToken.None);
 
         Assert.Equal(sdkUri, result);
+    }
+
+    [Fact]
+    public async Task GetPresignedUrlAsync_TokenCredentialAuth_GeneratesUserDelegationSasUri()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var mockContainer = new Mock<BlobContainerClient>();
+        var mockBlob = new Mock<BlobClient>();
+        
+        mockService.Setup(s => s.AccountName).Returns("devstoreaccount1");
+        mockService.Setup(s => s.GetBlobContainerClient("famtree-media")).Returns(mockContainer.Object);
+        mockContainer.Setup(c => c.GetBlobClient("events/E001/cert.jpg")).Returns(mockBlob.Object);
+        mockBlob.Setup(b => b.CanGenerateSasUri).Returns(false);
+        mockBlob.Setup(b => b.Uri).Returns(new Uri("http://storage:10000/devstoreaccount1/famtree-media/events/E001/cert.jpg"));
+
+        var fakeKey = BlobsModelFactory.UserDelegationKey("signed-oid", "signed-tid", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), "signed-service", "signed-version", "dmFsdWU=");
+        var fakeResponse = Mock.Of<Response<UserDelegationKey>>(r => r.Value == fakeKey);
+
+        mockService
+            .Setup(s => s.GetUserDelegationKeyAsync(It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(fakeResponse);
+
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var result = await provider.GetPresignedUrlAsync("famtree-media", "events/E001/cert.jpg", TimeSpan.FromMinutes(15), CancellationToken.None);
+
+        Assert.Contains("sig=", result.Query);
+        Assert.Contains("se=", result.Query);
+        mockService.Verify(s => s.GetUserDelegationKeyAsync(It.IsAny<DateTimeOffset?>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

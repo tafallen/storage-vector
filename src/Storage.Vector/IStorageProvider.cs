@@ -51,4 +51,11 @@ public interface IStorageProvider
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A Task representing the asynchronous operation.</returns>
     Task EnsureContainerExistsAsync(string container, CancellationToken ct);
+
+    /// <summary>
+    /// Verifies if a given presigned URL is valid (not expired and has a valid signature).
+    /// </summary>
+    /// <param name="url">The presigned URL to verify.</param>
+    /// <returns>True if the URL is valid, false if expired, tampered with, or invalid.</returns>
+    bool VerifyPresignedUrl(string url);
 }

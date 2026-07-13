@@ -16,6 +16,15 @@ public static class LocalFilePathResolver
     /// <exception cref="StorageException">Thrown if the path escapes the root path boundary.</exception>
     public static string ResolveContained(string rootPath, string container, string key)
     {
+        if (string.IsNullOrWhiteSpace(container))
+        {
+            throw new ArgumentException("Container name cannot be null, empty, or whitespace.", nameof(container));
+        }
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new ArgumentException("Key name cannot be null, empty, or whitespace.", nameof(key));
+        }
+
         var root = Path.GetFullPath(rootPath);
         var resolved = Path.GetFullPath(Path.Combine(root, container, key));
 
