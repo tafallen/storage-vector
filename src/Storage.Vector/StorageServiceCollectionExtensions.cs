@@ -5,17 +5,22 @@ using Microsoft.Extensions.Options;
 
 namespace Storage.Vector;
 
+/// <summary>
+/// Service collection extension methods to register storage providers.
+/// </summary>
 public static class StorageServiceCollectionExtensions
 {
     /// <summary>DI key the secondary IStorageProvider is registered under (see AddSecondaryStorageProvider).</summary>
     public const string SecondaryProviderKey = "secondary";
 
+    /// <summary>
+    /// Registers the Azure Blob Storage provider and its configurations.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddAzureBlobStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
-        // ValidateOnStart fails the app at boot with a clear error if
-        // Storage:ConnectionString is missing or malformed, instead of
-        // surfacing as a confusing error on the first real storage operation
-        // a user triggers in production.
         services.AddOptions<StorageOptions>()
             .Bind(configuration.GetSection(StorageOptions.SectionName))
             .Validate(o => IsValidConnectionString(o.ConnectionString), "Storage:ConnectionString is missing or malformed.")
@@ -28,13 +33,17 @@ public static class StorageServiceCollectionExtensions
             return new BlobServiceClient(options.ConnectionString);
         });
 
-        // Stateless — depends only on a singleton — so a singleton lifetime
-        // avoids an unnecessary allocation per request.
         services.AddSingleton<IStorageProvider, AzureBlobStorageProvider>();
 
         return services;
     }
 
+    /// <summary>
+    /// Registers the Local Filesystem storage provider and its configurations.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddLocalFileStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<StorageOptions>()
@@ -50,12 +59,29 @@ public static class StorageServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Helper to check if the configured provider under the default "Storage" section is LocalFile.
+    /// </summary>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>True if Provider is LocalFile, false otherwise.</returns>
     public static bool UsesLocalFileProvider(IConfiguration configuration) =>
         UsesLocalFileProvider(configuration, StorageOptions.SectionName);
 
+    /// <summary>
+    /// Helper to check if the configured provider under a specific section name is LocalFile.
+    /// </summary>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <param name="sectionName">The section name containing the Provider key.</param>
+    /// <returns>True if Provider is LocalFile, false otherwise.</returns>
     public static bool UsesLocalFileProvider(IConfiguration configuration, string sectionName) =>
         string.Equals(configuration[$"{sectionName}:Provider"], "LocalFile", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Dynamically registers the primary storage provider based on configuration.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
         if (UsesLocalFileProvider(configuration))
@@ -73,9 +99,11 @@ public static class StorageServiceCollectionExtensions
     /// <summary>
     /// Registers a second, independently-configured IStorageProvider under the keyed DI
     /// slot "secondary" (see SecondaryProviderKey), bound from "Storage:Secondary:*"
-    /// (SecondaryStorageOptions). Callers gate this behind Storage:SyncEnabled -- see
-    /// Program.cs -- since most deployments don't run media sync (FAM-NF-11) at all.
+    /// (SecondaryStorageOptions).
     /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddSecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
         if (UsesLocalFileProvider(configuration, SecondaryStorageOptions.SectionName))
@@ -98,11 +126,6 @@ public static class StorageServiceCollectionExtensions
             .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Secondary:Container is missing.")
             .ValidateOnStart();
 
-        // Constructor-shape adapter (option (c) from the FAM-NF-11 Task 2 plan): both
-        // AzureBlobStorageProvider and LocalFileStorageProvider take IOptions<StorageOptions>
-        // specifically, so a SecondaryStorageOptions instance is mapped into a
-        // StorageOptions-shaped IOptions<T> at registration time rather than changing either
-        // provider's constructor or introducing a shared options interface.
         services.AddKeyedSingleton<IStorageProvider, AzureBlobStorageProvider>(SecondaryProviderKey, (sp, _) =>
         {
             var secondaryOptions = sp.GetRequiredService<IOptions<SecondaryStorageOptions>>().Value;
@@ -132,13 +155,12 @@ public static class StorageServiceCollectionExtensions
         return services;
     }
 
-    // Option (c) from the FAM-NF-11 Task 2 plan's constructor-shape note: builds a
-    // StorageOptions-shaped IOptions<T> from a SecondaryStorageOptions instance so the existing
-    // provider constructors (which take IOptions<StorageOptions>) can be reused unmodified.
-    // Public (not internal) so FAMTree.Api's Program.cs can reuse it for the secondary health
-    // check registration too, rather than duplicating this mapping a second time -- FAMTree.Api
-    // and Storage.Vector are separate assemblies after FAM-NF-20, so internal is no longer
-    // visible across that boundary.
+    /// <summary>
+    /// Builds a StorageOptions-shaped IOptions of StorageOptions from a SecondaryStorageOptions instance.
+    /// This allows reusing the existing provider constructors without modifications.
+    /// </summary>
+    /// <param name="secondary">The secondary storage options instance.</param>
+    /// <returns>A mapped IOptions wrapped StorageOptions instance.</returns>
     public static IOptions<StorageOptions> ToPrimaryShapedOptions(SecondaryStorageOptions secondary) =>
         Options.Create(new StorageOptions
         {
@@ -149,6 +171,7 @@ public static class StorageServiceCollectionExtensions
             RootPath = secondary.RootPath,
             SigningKey = secondary.SigningKey,
             PublicBaseUrl = secondary.PublicBaseUrl,
+            LocalFileDownloadRoute = secondary.LocalFileDownloadRoute,
         });
 
     private static bool IsValidConnectionString(string? connectionString)

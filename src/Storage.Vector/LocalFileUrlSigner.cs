@@ -3,10 +3,20 @@ using System.Text;
 
 namespace Storage.Vector;
 
-// Signs local-file presigned URLs with HMAC-SHA256 over "{container}/{key}/{expiresAt}",
-// since a local disk has no native SAS-token equivalent to Azure Blob's GenerateSasUri.
+/// <summary>
+/// Signs and verifies local-file presigned URLs with HMAC-SHA256 over "{container}/{key}/{expiresAt}".
+/// This provides a secure local disk equivalent to Azure SAS tokens.
+/// </summary>
 public static class LocalFileUrlSigner
 {
+    /// <summary>
+    /// Computes the HMAC-SHA256 signature for a given container, key, and expiration.
+    /// </summary>
+    /// <param name="signingKey">The HMAC signing key.</param>
+    /// <param name="container">The container name.</param>
+    /// <param name="key">The object key.</param>
+    /// <param name="expiresAtUnixSeconds">The expiration timestamp in Unix seconds.</param>
+    /// <returns>A lowercase hexadecimal signature string.</returns>
     public static string Compute(string signingKey, string container, string key, long expiresAtUnixSeconds)
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(signingKey));
@@ -15,6 +25,16 @@ public static class LocalFileUrlSigner
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Verifies if a provided signature matches the expected signature for a given container, key, and expiration.
+    /// Uses a fixed-time comparison to prevent timing attacks.
+    /// </summary>
+    /// <param name="signingKey">The HMAC signing key.</param>
+    /// <param name="container">The container name.</param>
+    /// <param name="key">The object key.</param>
+    /// <param name="expiresAtUnixSeconds">The expiration timestamp in Unix seconds.</param>
+    /// <param name="providedSignatureHex">The hexadecimal signature provided by the client.</param>
+    /// <returns>True if the signature matches, false otherwise.</returns>
     public static bool Verify(string signingKey, string container, string key, long expiresAtUnixSeconds, string providedSignatureHex)
     {
         var expected = Compute(signingKey, container, key, expiresAtUnixSeconds);

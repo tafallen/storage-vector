@@ -1,6 +1,7 @@
 namespace Storage.Vector;
 
 /// <summary>
+/// Configuration options for the secondary (backup/mirror) storage provider.
 /// Mirrors StorageOptions's shape exactly (Provider/ConnectionString/Container/
 /// PublicBlobEndpoint/RootPath/SigningKey/PublicBaseUrl), minus SyncEnabled -- that flag lives
 /// only on the primary options class since it gates whether the secondary is used at all. Bound
@@ -14,28 +15,49 @@ namespace Storage.Vector;
 /// </summary>
 public class SecondaryStorageOptions
 {
+    /// <summary>
+    /// The default configuration section name for secondary storage options.
+    /// </summary>
     public const string SectionName = "Storage:Secondary";
 
+    /// <summary>
+    /// The connection string to the secondary Azure Blob Storage account.
+    /// </summary>
     public string ConnectionString { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The default container or root folder name where secondary files are uploaded.
+    /// </summary>
     public string Container { get; set; } = string.Empty;
 
-    // See StorageOptions.PublicBlobEndpoint for the full rationale -- same semantics, applied to
-    // the secondary provider's own blob endpoint.
+    /// <summary>
+    /// Optional endpoint override to rewrite presigned SAS URLs on the secondary provider.
+    /// </summary>
     public string? PublicBlobEndpoint { get; set; }
 
-    /// <summary>Which IStorageProvider implementation to register for the secondary: "AzureBlob" (default) or "LocalFile".</summary>
+    /// <summary>
+    /// Which storage engine provider to register for the secondary: "AzureBlob" (default) or "LocalFile".
+    /// </summary>
     public string Provider { get; set; } = "AzureBlob";
 
-    // The following three are used only when Provider is "LocalFile"; they stay unset
-    // (and unvalidated) when the default "AzureBlob" provider is selected.
-
-    /// <summary>Absolute directory objects are stored under, one subdirectory per container.</summary>
+    /// <summary>
+    /// Absolute directory path where files are stored under on the local filesystem (used only when Provider is "LocalFile").
+    /// </summary>
     public string? RootPath { get; set; }
 
-    /// <summary>HMAC-SHA256 key used to sign and verify local-file presigned download URLs.</summary>
+    /// <summary>
+    /// HMAC-SHA256 secret key used to sign and verify presigned download URLs (used only when Provider is "LocalFile").
+    /// </summary>
     public string? SigningKey { get; set; }
 
-    /// <summary>Base URL (scheme+host+port) local-file presigned URLs are built against, e.g. "http://localhost:8081".</summary>
+    /// <summary>
+    /// Base URL (scheme, host, and port) used to construct local presigned URLs, e.g. "https://localhost:8081" (used only when Provider is "LocalFile").
+    /// </summary>
     public string? PublicBaseUrl { get; set; }
+
+    /// <summary>
+    /// The route path segment used to generate and route local file download requests (used only when Provider is "LocalFile").
+    /// Defaults to "api/v1/media/local-file".
+    /// </summary>
+    public string LocalFileDownloadRoute { get; set; } = "api/v1/media/local-file";
 }

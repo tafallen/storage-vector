@@ -21,7 +21,7 @@
     <PackageTags>storage;azure;blob;localfile;presigned-urls;vector</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591;NU1605</NoWarn>
+    <NoWarn>$(NoWarn);NU1605</NoWarn>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <Deterministic>true</Deterministic>

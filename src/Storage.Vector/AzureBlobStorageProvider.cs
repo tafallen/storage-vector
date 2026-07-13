@@ -6,22 +6,31 @@ using Microsoft.Extensions.Options;
 
 namespace Storage.Vector;
 
+/// <summary>
+/// A storage provider implementation that uses Azure Blob Storage.
+/// </summary>
 public class AzureBlobStorageProvider : IStorageProvider
 {
-    // Caps how long a presigned URL can grant unauthenticated access to a blob,
-    // regardless of what a caller requests — an unbounded expiry would create a
-    // permanent leak-risk link for private media.
+    /// <summary>
+    /// Caps how long a presigned SAS URL can grant unauthenticated access to a blob (currently 1 hour).
+    /// </summary>
     public static readonly TimeSpan MaxPresignedUrlExpiry = TimeSpan.FromHours(1);
 
     private readonly BlobServiceClient _service;
     private readonly StorageOptions _options;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AzureBlobStorageProvider"/> class.
+    /// </summary>
+    /// <param name="service">The Azure Blob service client.</param>
+    /// <param name="options">The storage configuration options.</param>
     public AzureBlobStorageProvider(BlobServiceClient service, IOptions<StorageOptions> options)
     {
         _service = service;
         _options = options.Value;
     }
 
+    /// <inheritdoc />
     public async Task<string> PutObjectAsync(string container, string key, Stream data, string contentType, CancellationToken ct)
     {
         try
@@ -36,6 +45,7 @@ public class AzureBlobStorageProvider : IStorageProvider
         }
     }
 
+    /// <inheritdoc />
     public Task<Uri> GetPresignedUrlAsync(string container, string key, TimeSpan expiry, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -54,10 +64,6 @@ public class AzureBlobStorageProvider : IStorageProvider
         }
     }
 
-    // Rewrites a SAS URI's scheme/host/port to the configured public-facing blob
-    // endpoint, leaving path and query (which carries the SAS signature) untouched.
-    // A no-op when PublicBlobEndpoint isn't configured, so real Azure deployments
-    // (whose blob endpoints are already publicly reachable) are unaffected.
     private Uri RewriteToPublicEndpoint(Uri uri)
     {
         if (string.IsNullOrWhiteSpace(_options.PublicBlobEndpoint))
@@ -76,6 +82,7 @@ public class AzureBlobStorageProvider : IStorageProvider
         return builder.Uri;
     }
 
+    /// <inheritdoc />
     public async Task<Stream> GetObjectAsync(string container, string key, CancellationToken ct)
     {
         try
@@ -90,6 +97,7 @@ public class AzureBlobStorageProvider : IStorageProvider
         }
     }
 
+    /// <inheritdoc />
     public async Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         try
@@ -103,6 +111,7 @@ public class AzureBlobStorageProvider : IStorageProvider
         }
     }
 
+    /// <inheritdoc />
     public async Task EnsureContainerExistsAsync(string container, CancellationToken ct)
     {
         try

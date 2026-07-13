@@ -1,42 +1,59 @@
 namespace Storage.Vector;
 
+/// <summary>
+/// Configuration options for the primary storage provider.
+/// </summary>
 public class StorageOptions
 {
+    /// <summary>
+    /// The default configuration section name for primary storage options.
+    /// </summary>
     public const string SectionName = "Storage";
 
+    /// <summary>
+    /// The connection string to the Azure Blob Storage account or local Azurite emulator.
+    /// </summary>
     public string ConnectionString { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The default container or root folder name where files are uploaded.
+    /// </summary>
     public string Container { get; set; } = string.Empty;
 
-    // Optional. When set, presigned download URLs have their scheme/host/port
-    // rewritten to this public-facing endpoint (path and query — including the
-    // SAS signature — are preserved verbatim). Needed only when the storage
-    // account's internal endpoint (e.g. a Docker Compose service hostname like
-    // `storage`) is not reachable from outside the container network — a real
-    // Azure Storage account is already publicly reachable, so this should stay
-    // unset in production.
+    /// <summary>
+    /// Optional endpoint override (e.g. a CDN or local proxy) to rewrite presigned SAS URLs.
+    /// Preserves the path and query string parameters (including SAS tokens) untouched.
+    /// </summary>
     public string? PublicBlobEndpoint { get; set; }
 
-    /// <summary>Which IStorageProvider implementation to register: "AzureBlob" (default) or "LocalFile".</summary>
+    /// <summary>
+    /// Which storage engine provider to register: "AzureBlob" (default) or "LocalFile".
+    /// </summary>
     public string Provider { get; set; } = "AzureBlob";
 
-    // The following three are used only when Provider is "LocalFile"; they stay unset
-    // (and unvalidated) when the default "AzureBlob" provider is selected.
-
-    /// <summary>Absolute directory objects are stored under, one subdirectory per container.</summary>
+    /// <summary>
+    /// Absolute directory path where files are stored under on the local filesystem (used only when Provider is "LocalFile").
+    /// </summary>
     public string? RootPath { get; set; }
 
-    /// <summary>HMAC-SHA256 key used to sign and verify local-file presigned download URLs.</summary>
+    /// <summary>
+    /// HMAC-SHA256 secret key used to sign and verify presigned download URLs (used only when Provider is "LocalFile").
+    /// </summary>
     public string? SigningKey { get; set; }
 
-    /// <summary>Base URL (scheme+host+port) local-file presigned URLs are built against, e.g. "http://localhost:8080".</summary>
+    /// <summary>
+    /// Base URL (scheme, host, and port) used to construct local presigned URLs, e.g. "https://localhost:5001" (used only when Provider is "LocalFile").
+    /// </summary>
     public string? PublicBaseUrl { get; set; }
 
     /// <summary>
-    /// Opt-in flag (default false) gating whether a secondary IStorageProvider (bound from
-    /// "Storage:Secondary:*", see SecondaryStorageOptions) is registered under the DI key
-    /// "secondary" and media sync (FAM-NF-11) runs. Lives on the primary options class since it
-    /// gates whether the secondary is used at all, alongside Provider.
+    /// The route path segment used to generate and route local file download requests (used only when Provider is "LocalFile").
+    /// Defaults to "api/v1/media/local-file".
+    /// </summary>
+    public string LocalFileDownloadRoute { get; set; } = "api/v1/media/local-file";
+
+    /// <summary>
+    /// Gating flag to control whether a secondary storage provider is registered under the keyed slot "secondary".
     /// </summary>
     public bool SyncEnabled { get; set; } = false;
 }

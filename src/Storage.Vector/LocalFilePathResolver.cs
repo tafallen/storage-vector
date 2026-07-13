@@ -1,17 +1,19 @@
 namespace Storage.Vector;
 
-// Centralizes the container/key -> filesystem-path resolution used by both
-// LocalFileStorageProvider (read/write/delete) and the presigned-download endpoint
-// (FAMTree.Api/Storage/LocalFileStorageEndpoints.cs), so the containment check lives in
-// exactly one place rather than being re-derived per caller (FAM-TD-101).
+/// <summary>
+/// Resolves container and key identifiers to filesystem paths and enforces directory containment.
+/// </summary>
 public static class LocalFilePathResolver
 {
-    // Resolves container/key against rootPath and verifies the result is still contained
-    // within rootPath. A key containing ".." (or an absolute/rooted segment) could otherwise
-    // walk Path.Combine's result outside rootPath entirely -- e.g. a client-supplied upload
-    // filename of "../../../../etc/passwd" becoming part of the storage key. Path.GetFullPath
-    // normalizes ".." segments before the comparison, so this catches the escape regardless of
-    // how many "../" segments or what mix of separators the key contains.
+    /// <summary>
+    /// Resolves container/key against rootPath and verifies the result is still contained within rootPath.
+    /// This prevents path traversal directory breakout attacks.
+    /// </summary>
+    /// <param name="rootPath">The base directory of the storage system.</param>
+    /// <param name="container">The container folder name.</param>
+    /// <param name="key">The object key (filename or subpath).</param>
+    /// <returns>The fully resolved absolute path, if secure.</returns>
+    /// <exception cref="StorageException">Thrown if the path escapes the root path boundary.</exception>
     public static string ResolveContained(string rootPath, string container, string key)
     {
         var root = Path.GetFullPath(rootPath);
