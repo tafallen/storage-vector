@@ -33,6 +33,41 @@ classDiagram
         +EnsureContainerExistsAsync(container, ct) Task
     }
 
+    class IStorageContainer {
+        <<interface>>
+        +Name string
+        +File(key) IStorageObject
+        +EnsureExistsAsync(ct) Task
+    }
+
+    class IStorageObject {
+        <<interface>>
+        +Key string
+        +Container IStorageContainer
+        +UploadAsync(data, contentType, ct) Task~string~
+        +DownloadAsync(ct) Task~Stream~
+        +GetPresignedUrlAsync(expiry, ct) Task~Uri~
+        +DeleteAsync(ct) Task
+    }
+
+    class StorageContainer {
+        -IStorageProvider _provider
+        +Name string
+        +File(key) StorageObject
+        +EnsureExistsAsync(ct) Task
+    }
+
+    class StorageObject {
+        -IStorageProvider _provider
+        -StorageContainer _container
+        +Key string
+        +Container IStorageContainer
+        +UploadAsync(...) Task~string~
+        +DownloadAsync(...) Task~Stream~
+        +GetPresignedUrlAsync(...) Task~Uri~
+        +DeleteAsync(...) Task
+    }
+
     class AzureBlobStorageProvider {
         -BlobServiceClient _client
         -StorageOptions _options
@@ -66,6 +101,9 @@ classDiagram
 
     IStorageProvider <|.. AzureBlobStorageProvider
     IStorageProvider <|.. LocalFileStorageProvider
+    IStorageContainer <|.. StorageContainer
+    IStorageObject <|.. StorageObject
+    StorageContainer ..> StorageObject : Resolves
     LocalFileStorageProvider ..> LocalFilePathResolver : Uses
     LocalFileStorageProvider ..> LocalFileUrlSigner : Uses
 ```
@@ -85,6 +123,11 @@ classDiagram
 
 ### C. Azure Blob Storage Components
 - **`AzureBlobStorageProvider`**: Wraps the Azure SDK's `BlobServiceClient`. It handles blob operations, handles Azure SAS token generation for presigned URLs, and maps Azure's custom HTTP errors to `StorageException` models.
+
+### D. Fluent Interface Layer
+- **`IStorageContainer` & `IStorageObject`**: Contextual client contracts representing container-level and object-level boundaries.
+- **`StorageContainer` & `StorageObject`**: Zero-allocation `readonly struct` implementations that wrap `IStorageProvider` to offer fluent, scoped methods (e.g., `provider.Container("docs").File("resume.pdf").DownloadAsync()`).
+- **`FluentStorageExtensions`**: Extension entry points (`Container(...)` and `File(...)`) on `IStorageProvider` to initiate the fluent builder chains.
 
 ---
 

@@ -72,6 +72,32 @@ public class DocumentService(IStorageProvider storage)
 }
 ```
 
+### Fluent Scoped Operations
+
+To avoid repeating the container name or key in consecutive actions, you can scope your operations using the fluent API:
+
+```csharp
+public class DocumentService(IStorageProvider storage)
+{
+    public async Task ProcessInvoiceAsync(string key, Stream data, CancellationToken ct)
+    {
+        // 1. Scope to a container
+        var container = storage.Container("documents");
+        await container.EnsureExistsAsync(ct);
+
+        // 2. Scope to a file
+        var file = container.File(key);
+
+        // 3. Perform actions on that file fluently
+        await file.UploadAsync(data, "application/pdf", ct);
+        
+        var downloadUrl = await file.GetPresignedUrlAsync(TimeSpan.FromMinutes(15), ct);
+        
+        using var downloadStream = await file.DownloadAsync(ct);
+    }
+}
+```
+
 ### Register a Keyed Secondary Provider (Backup Sync)
 
 ```csharp
