@@ -22,6 +22,7 @@ public class LocalFileStorageProvider : IStorageProvider
     private readonly string _rootPathWithSeparator;
     private readonly byte[] _signingKeyBytes;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _createdDirectories = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _fileExistenceCache = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalFileStorageProvider"/> class.
@@ -68,6 +69,8 @@ public class LocalFileStorageProvider : IStorageProvider
             throw new StorageException(StorageErrorKind.Unavailable, $"Could not write object '{container}/{key}'.", ex);
         }
 
+        _fileExistenceCache[path] = true;
+
         var lastWrite = File.GetLastWriteTimeUtc(path);
         return $"{lastWrite.Ticks:x}-{length:x}";
     }
@@ -78,7 +81,14 @@ public class LocalFileStorageProvider : IStorageProvider
         ct.ThrowIfCancellationRequested();
 
         var path = ResolvePath(container, key);
-        if (!File.Exists(path))
+        
+        if (!_fileExistenceCache.TryGetValue(path, out var exists))
+        {
+            exists = File.Exists(path);
+            _fileExistenceCache[path] = exists;
+        }
+
+        if (!exists)
         {
             throw new StorageException(StorageErrorKind.NotFound, $"No object at '{container}/{key}'.");
         }
@@ -109,10 +119,14 @@ public class LocalFileStorageProvider : IStorageProvider
                 FileShare.Read,
                 bufferSize: _options.BufferSize,
                 useAsync: true);
+            
+            // If successfully opened, we can safely cache that the file exists
+            _fileExistenceCache[path] = true;
             return Task.FromResult(stream);
         }
         catch (FileNotFoundException ex)
         {
+            _fileExistenceCache[path] = false;
             throw new StorageException(StorageErrorKind.NotFound, $"No object at '{container}/{key}'.", ex);
         }
         catch (DirectoryNotFoundException ex)
@@ -133,10 +147,12 @@ public class LocalFileStorageProvider : IStorageProvider
         try
         {
             File.Delete(path);
+            _fileExistenceCache.TryRemove(path, out _);
         }
         catch (DirectoryNotFoundException)
         {
             // Container directory never existed — nothing to delete.
+            _fileExistenceCache.TryRemove(path, out _);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
