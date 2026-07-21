@@ -18,6 +18,8 @@ public class AzureBlobStorageProvider : IStorageProvider
 
     private readonly BlobServiceClient _service;
     private readonly StorageOptions _options;
+    private readonly System.Threading.SemaphoreSlim _keySemaphore = new(1, 1);
+    private UserDelegationKey? _cachedUserDelegationKey;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AzureBlobStorageProvider"/> class.
@@ -28,6 +30,34 @@ public class AzureBlobStorageProvider : IStorageProvider
     {
         _service = service;
         _options = options.Value;
+    }
+
+    private async Task<UserDelegationKey> GetUserDelegationKeyCachedAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var key = _cachedUserDelegationKey;
+        if (key != null && key.SignedExpiresOn > now.AddMinutes(30))
+        {
+            return key;
+        }
+
+        await _keySemaphore.WaitAsync(ct);
+        try
+        {
+            key = _cachedUserDelegationKey;
+            if (key != null && key.SignedExpiresOn > now.AddMinutes(30))
+            {
+                return key;
+            }
+
+            var keyExpiresOn = now.AddDays(1);
+            var response = await _service.GetUserDelegationKeyAsync(now.AddMinutes(-5), keyExpiresOn, cancellationToken: ct);
+            _cachedUserDelegationKey = response.Value;
+            return response.Value;
+        }
+        finally
+        {
+            _keySemaphore.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -64,12 +94,12 @@ public class AzureBlobStorageProvider : IStorageProvider
             }
             else
             {
-                // Entra ID TokenCredential flow: generate a User Delegation SAS
+                // Entra ID TokenCredential flow: generate a User Delegation SAS using sliding cache
                 var now = DateTimeOffset.UtcNow;
                 var startsOn = now.AddMinutes(-5); // Buffer for clock skew
                 var expiresOn = now.Add(cappedExpiry);
 
-                var userDelegationKey = await _service.GetUserDelegationKeyAsync(startsOn, expiresOn, cancellationToken: ct);
+                var userDelegationKey = await GetUserDelegationKeyCachedAsync(now, ct);
 
                 var sasBuilder = new BlobSasBuilder(BlobSasPermissions.Read, expiresOn)
                 {
@@ -81,7 +111,7 @@ public class AzureBlobStorageProvider : IStorageProvider
 
                 var blobUriBuilder = new BlobUriBuilder(blobClient.Uri)
                 {
-                    Sas = sasBuilder.ToSasQueryParameters(userDelegationKey.Value, _service.AccountName)
+                    Sas = sasBuilder.ToSasQueryParameters(userDelegationKey, _service.AccountName)
                 };
 
                 uri = blobUriBuilder.ToUri();

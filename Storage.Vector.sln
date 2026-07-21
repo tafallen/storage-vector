@@ -11,6 +11,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D00F02CD
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Storage.Vector.Tests", "tests\Storage.Vector.Tests\Storage.Vector.Tests.csproj", "{4941822B-9070-4219-A52F-3E16A9844BA9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Storage.Vector.Benchmarks", "tests\Storage.Vector.Benchmarks\Storage.Vector.Benchmarks.csproj", "{3B1D5CFB-08EA-4A92-80F9-12E604B026E5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -28,9 +30,14 @@ Global
 		{4941822B-9070-4219-A52F-3E16A9844BA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4941822B-9070-4219-A52F-3E16A9844BA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4941822B-9070-4219-A52F-3E16A9844BA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B1D5CFB-08EA-4A92-80F9-12E604B026E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B1D5CFB-08EA-4A92-80F9-12E604B026E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B1D5CFB-08EA-4A92-80F9-12E604B026E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B1D5CFB-08EA-4A92-80F9-12E604B026E5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{5B665BEE-921E-4ECA-8FDF-9DFAC097EE50} = {575367DD-E7BE-4E30-ABE9-BCED7E642F16}
 		{4941822B-9070-4219-A52F-3E16A9844BA9} = {D00F02CD-716A-4026-BFB9-7CDBA32E7978}
+		{3B1D5CFB-08EA-4A92-80F9-12E604B026E5} = {D00F02CD-716A-4026-BFB9-7CDBA32E7978}
 	EndGlobalSection
 EndGlobal

@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+
 namespace Storage.Vector;
 
 /// <summary>
@@ -16,6 +19,16 @@ public static class LocalFilePathResolver
     /// <exception cref="StorageException">Thrown if the path escapes the root path boundary.</exception>
     public static string ResolveContained(string rootPath, string container, string key)
     {
+        var root = Path.GetFullPath(rootPath);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        return ResolveContainedFast(root, rootWithSeparator, container, key);
+    }
+
+    /// <summary>
+    /// Resolves container/key using pre-normalized root paths to avoid expensive root path I/O resolution calls.
+    /// </summary>
+    public static string ResolveContainedFast(string normalizedRootPath, string rootPathWithSeparator, string container, string key)
+    {
         if (string.IsNullOrWhiteSpace(container))
         {
             throw new ArgumentException("Container name cannot be null, empty, or whitespace.", nameof(container));
@@ -25,11 +38,9 @@ public static class LocalFilePathResolver
             throw new ArgumentException("Key name cannot be null, empty, or whitespace.", nameof(key));
         }
 
-        var root = Path.GetFullPath(rootPath);
-        var resolved = Path.GetFullPath(Path.Combine(root, container, key));
+        var resolved = Path.GetFullPath(Path.Combine(normalizedRootPath, container, key));
 
-        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        if (!resolved.StartsWith(rootWithSeparator, StringComparison.Ordinal) && resolved != root)
+        if (!resolved.StartsWith(rootPathWithSeparator, StringComparison.Ordinal) && resolved != normalizedRootPath)
         {
             throw new StorageException(StorageErrorKind.AccessDenied, $"Key '{key}' resolves outside the storage root.");
         }

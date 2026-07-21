@@ -1,3 +1,8 @@
+using System;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 
 namespace Storage.Vector;
@@ -13,6 +18,10 @@ public class LocalFileStorageProvider : IStorageProvider
     public static readonly TimeSpan MaxPresignedUrlExpiry = TimeSpan.FromHours(1);
 
     private readonly StorageOptions _options;
+    private readonly string _normalizedRootPath;
+    private readonly string _rootPathWithSeparator;
+    private readonly byte[] _signingKeyBytes;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _createdDirectories = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalFileStorageProvider"/> class.
@@ -21,14 +30,26 @@ public class LocalFileStorageProvider : IStorageProvider
     public LocalFileStorageProvider(IOptions<StorageOptions> options)
     {
         _options = options.Value;
+        var root = Path.GetFullPath(_options.RootPath ?? string.Empty);
+        _normalizedRootPath = root;
+        _rootPathWithSeparator = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        _signingKeyBytes = string.IsNullOrEmpty(_options.SigningKey) 
+            ? Array.Empty<byte>() 
+            : Encoding.UTF8.GetBytes(_options.SigningKey);
     }
 
     /// <inheritdoc />
     public async Task<string> PutObjectAsync(string container, string key, Stream data, string contentType, CancellationToken ct)
     {
         var path = ResolvePath(container, key);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var dir = Path.GetDirectoryName(path)!;
+        if (!_createdDirectories.TryGetValue(dir, out _))
+        {
+            Directory.CreateDirectory(dir);
+            _createdDirectories.TryAdd(dir, true);
+        }
 
+        long length;
         try
         {
             // Use FileOptions.Asynchronous and useAsync: true for non-blocking handle creation and writes.
@@ -40,14 +61,15 @@ public class LocalFileStorageProvider : IStorageProvider
                 bufferSize: _options.BufferSize,
                 useAsync: true);
             await data.CopyToAsync(dest, _options.BufferSize, ct);
+            length = dest.Length;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             throw new StorageException(StorageErrorKind.Unavailable, $"Could not write object '{container}/{key}'.", ex);
         }
 
-        var info = new FileInfo(path);
-        return $"{info.LastWriteTimeUtc.Ticks:x}-{info.Length:x}";
+        var lastWrite = File.GetLastWriteTimeUtc(path);
+        return $"{lastWrite.Ticks:x}-{length:x}";
     }
 
     /// <inheritdoc />
@@ -63,7 +85,7 @@ public class LocalFileStorageProvider : IStorageProvider
 
         var cappedExpiry = expiry > MaxPresignedUrlExpiry ? MaxPresignedUrlExpiry : expiry;
         var expiresAt = DateTimeOffset.UtcNow.Add(cappedExpiry).ToUnixTimeSeconds();
-        var signature = LocalFileUrlSigner.Compute(_options.SigningKey!, container, key, expiresAt);
+        var signature = LocalFileUrlSigner.Compute(_signingKeyBytes, container, key, expiresAt);
 
         var route = _options.LocalFileDownloadRoute.Trim('/');
         var url = $"{_options.PublicBaseUrl!.TrimEnd('/')}/{route}/{container}/{key}?expires={expiresAt}&sig={signature}";
@@ -129,7 +151,12 @@ public class LocalFileStorageProvider : IStorageProvider
     {
         try
         {
-            Directory.CreateDirectory(Path.Combine(_options.RootPath!, container));
+            var dir = Path.Combine(_normalizedRootPath, container);
+            if (!_createdDirectories.TryGetValue(dir, out _))
+            {
+                Directory.CreateDirectory(dir);
+                _createdDirectories.TryAdd(dir, true);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -145,26 +172,44 @@ public class LocalFileStorageProvider : IStorageProvider
         try
         {
             var uri = new Uri(url);
-            var query = uri.Query.TrimStart('?').Split('&');
-            string? expiresStr = null;
-            string? sig = null;
-
-            foreach (var part in query)
+            var querySpan = uri.Query.AsSpan();
+            if (querySpan.StartsWith("?"))
             {
-                var kv = part.Split('=');
-                if (kv.Length == 2)
+                querySpan = querySpan.Slice(1);
+            }
+
+            ReadOnlySpan<char> expiresStr = default;
+            ReadOnlySpan<char> sig = default;
+
+            while (!querySpan.IsEmpty)
+            {
+                int ampIndex = querySpan.IndexOf('&');
+                ReadOnlySpan<char> parameter = ampIndex == -1 ? querySpan : querySpan.Slice(0, ampIndex);
+                querySpan = ampIndex == -1 ? default : querySpan.Slice(ampIndex + 1);
+
+                int eqIndex = parameter.IndexOf('=');
+                if (eqIndex != -1)
                 {
-                    if (kv[0] == "expires") expiresStr = Uri.UnescapeDataString(kv[1]);
-                    else if (kv[0] == "sig") sig = Uri.UnescapeDataString(kv[1]);
+                    var keySpan = parameter.Slice(0, eqIndex);
+                    var valueSpan = parameter.Slice(eqIndex + 1);
+
+                    if (keySpan.Equals("expires", StringComparison.Ordinal))
+                    {
+                        expiresStr = valueSpan;
+                    }
+                    else if (keySpan.Equals("sig", StringComparison.Ordinal))
+                    {
+                        sig = valueSpan;
+                    }
                 }
             }
 
-            if (string.IsNullOrEmpty(expiresStr) || string.IsNullOrEmpty(sig))
+            if (expiresStr.IsEmpty || sig.IsEmpty)
             {
                 return false;
             }
 
-            if (!long.TryParse(expiresStr, out var expiresAt))
+            if (!long.TryParse(expiresStr, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var expiresAt))
             {
                 return false;
             }
@@ -192,7 +237,7 @@ public class LocalFileStorageProvider : IStorageProvider
             var container = path.Substring(0, firstSlash);
             var key = path.Substring(firstSlash + 1);
 
-            return LocalFileUrlSigner.Verify(_options.SigningKey!, container, key, expiresAt, sig);
+            return LocalFileUrlSigner.Verify(_signingKeyBytes, container, key, expiresAt, sig.ToString());
         }
         catch (Exception)
         {
@@ -201,5 +246,5 @@ public class LocalFileStorageProvider : IStorageProvider
     }
 
     private string ResolvePath(string container, string key) =>
-        LocalFilePathResolver.ResolveContained(_options.RootPath!, container, key);
+        LocalFilePathResolver.ResolveContainedFast(_normalizedRootPath, _rootPathWithSeparator, container, key);
 }
