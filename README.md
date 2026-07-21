@@ -15,6 +15,7 @@ A portable **.NET 8** storage provider abstraction and implementations for Azure
 - 🔒 **Path traversal protection** — local provider containment checks prevent directory breakout attacks
 - 👯 **Keyed secondary mirroring** — configure and inject independent backup/sync storage targets via keyed DI
 - 🔑 **Presigned URLs** — generate signed download URLs (HMAC-SHA256 signatures for LocalFile, SAS tokens for Azure)
+- 🚀 **High Performance & Zero-Allocation** — optimized via thread-safe in-memory metadata caches, pre-computed path normalizations, and span-based zero-allocation url signing
 - ⚙️ **Startup validation** — throws clear errors on application boot if options or paths are missing
 - 📦 **NuGet-ready** — structured for `dotnet pack` with symbols (`.snupkg`)
 - 💉 **DI-friendly** — integrates with `Microsoft.Extensions.DependencyInjection` via `AddStorageProvider()`

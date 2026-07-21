@@ -117,12 +117,12 @@ classDiagram
 - **`StorageException` & `StorageErrorKind`**: Direct exceptions from Azure SDK (e.g. `RequestFailedException`) or filesystem I/O (e.g. `UnauthorizedAccessException`, `FileNotFoundException`) are caught and translated into `StorageException` with a standard `StorageErrorKind` (e.g. `NotFound`, `AccessDenied`, `Transient`, `Unknown`).
 
 ### B. Local Filesystem Components
-- **`LocalFileStorageProvider`**: Manages reading and writing files under a defined root path. It delegates file-path resolution and signature generations to sub-components.
-- **`LocalFilePathResolver`**: Implements path-traversal containment checks. It resolves a container and key relative to the configured root path, calls `Path.GetFullPath`, and verifies that the resolved path starts with the expected base directory.
-- **`LocalFileUrlSigner`**: Signs download URLs using HMAC-SHA256 with a configured private key, incorporating expiration timestamps. It validates incoming request URLs by recalculating the HMAC signature.
+- **`LocalFileStorageProvider`**: Manages reading and writing files under a defined root path. To optimize file operations, it pre-caches normalized base path references (eliminating redundant `Path.GetFullPath` root checks), manages a thread-safe directory creation cache (avoiding repeated metadata system checks on uploads), and utilizes a thread-safe local file existence cache to bypass disk I/O when generating presigned download URLs.
+- **`LocalFilePathResolver`**: Implements path-traversal containment checks. It supports both standard checking and an optimized fast-path check that bypasses `Path.GetFullPath` entirely when no relative traversal elements (like `..`, `:`, or starting separators) are detected.
+- **`LocalFileUrlSigner`**: Signs download URLs using HMAC-SHA256 with a pre-encoded private key, incorporating expiration timestamps. It leverages stateless `.NET 8` cryptographic APIs (`HMACSHA256.HashData`) and zero-allocation span formatting to sign and verify URLs without heap allocations.
 
 ### C. Azure Blob Storage Components
-- **`AzureBlobStorageProvider`**: Wraps the Azure SDK's `BlobServiceClient`. It handles blob operations, handles Azure SAS token generation for presigned URLs, and maps Azure's custom HTTP errors to `StorageException` models.
+- **`AzureBlobStorageProvider`**: Wraps the Azure SDK's `BlobServiceClient`. It handles blob operations, SAS token generation, and maps Azure exceptions to `StorageException`. When running under Entra ID token-based authentication, it implements a thread-safe sliding cache for Azure's `UserDelegationKey` using a Semaphore lock to eliminate redundant network roundtrips to Azure storage for key fetching.
 
 ### D. Fluent Interface Layer
 - **`IStorageContainer` & `IStorageObject`**: Contextual client contracts representing container-level and object-level boundaries.
