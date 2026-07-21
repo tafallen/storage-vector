@@ -38,7 +38,29 @@ public static class LocalFilePathResolver
             throw new ArgumentException("Key name cannot be null, empty, or whitespace.", nameof(key));
         }
 
-        var resolved = Path.GetFullPath(Path.Combine(normalizedRootPath, container, key));
+        // Fast-path: Check if there are directory traversal indicators.
+        // We look for:
+        // - ".." (parent directory traversal)
+        // - ":" (UNC roots, drive letters, alternative streams)
+        // - starting separators (absolute path indicators)
+        bool hasTraversals = container.Contains("..", StringComparison.Ordinal) ||
+                             key.Contains("..", StringComparison.Ordinal) ||
+                             container.Contains(':', StringComparison.Ordinal) ||
+                             key.Contains(':', StringComparison.Ordinal) ||
+                             key.StartsWith('/') ||
+                             key.StartsWith('\\') ||
+                             container.StartsWith('/') ||
+                             container.StartsWith('\\');
+
+        string resolved;
+        if (!hasTraversals)
+        {
+            resolved = Path.Combine(normalizedRootPath, container, key);
+        }
+        else
+        {
+            resolved = Path.GetFullPath(Path.Combine(normalizedRootPath, container, key));
+        }
 
         if (!resolved.StartsWith(rootPathWithSeparator, StringComparison.Ordinal) && resolved != normalizedRootPath)
         {
