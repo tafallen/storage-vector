@@ -157,14 +157,30 @@ public static class LocalFileUrlSigner
 
     private static string ConvertToHexLower(ReadOnlySpan<byte> bytes)
     {
-        return string.Create(bytes.Length * 2, bytes.ToArray(), (span, b) =>
+        var state = (
+            p1: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(0, 8)),
+            p2: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(8, 8)),
+            p3: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(16, 8)),
+            p4: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(24, 8))
+        );
+
+        return string.Create(64, state, (span, s) =>
         {
-            for (int i = 0; i < b.Length; i++)
-            {
-                span[i * 2] = GetHexChar(b[i] >> 4);
-                span[i * 2 + 1] = GetHexChar(b[i] & 0x0F);
-            }
+            WriteUlongHex(s.p1, span.Slice(0, 16));
+            WriteUlongHex(s.p2, span.Slice(16, 16));
+            WriteUlongHex(s.p3, span.Slice(32, 16));
+            WriteUlongHex(s.p4, span.Slice(48, 16));
         });
+    }
+
+    private static void WriteUlongHex(ulong val, Span<char> dest)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            byte b = (byte)(val >> (i * 8));
+            dest[i * 2] = GetHexChar(b >> 4);
+            dest[i * 2 + 1] = GetHexChar(b & 0x0F);
+        }
     }
 
     private static char GetHexChar(int value)

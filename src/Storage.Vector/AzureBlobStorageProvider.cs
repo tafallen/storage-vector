@@ -18,6 +18,7 @@ public class AzureBlobStorageProvider : IStorageProvider, IDisposable
 
     private readonly BlobServiceClient _service;
     private readonly StorageOptions _options;
+    private readonly Uri? _publicEndpointUri;
     private readonly System.Threading.SemaphoreSlim _keySemaphore = new(1, 1);
     private volatile UserDelegationKey? _cachedUserDelegationKey;
 
@@ -30,6 +31,7 @@ public class AzureBlobStorageProvider : IStorageProvider, IDisposable
     {
         _service = service;
         _options = options.Value;
+        _publicEndpointUri = string.IsNullOrWhiteSpace(_options.PublicBlobEndpoint) ? null : new Uri(_options.PublicBlobEndpoint);
     }
 
     /// <summary>
@@ -136,17 +138,16 @@ public class AzureBlobStorageProvider : IStorageProvider, IDisposable
 
     private Uri RewriteToPublicEndpoint(Uri uri)
     {
-        if (string.IsNullOrWhiteSpace(_options.PublicBlobEndpoint))
+        if (_publicEndpointUri == null)
         {
             return uri;
         }
 
-        var publicEndpoint = new Uri(_options.PublicBlobEndpoint);
         var builder = new UriBuilder(uri)
         {
-            Scheme = publicEndpoint.Scheme,
-            Host = publicEndpoint.Host,
-            Port = publicEndpoint.Port,
+            Scheme = _publicEndpointUri.Scheme,
+            Host = _publicEndpointUri.Host,
+            Port = _publicEndpointUri.Port,
         };
 
         return builder.Uri;

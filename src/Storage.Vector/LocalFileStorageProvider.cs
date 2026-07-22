@@ -68,7 +68,7 @@ public class LocalFileStorageProvider : IStorageProvider
         SetFileExistenceCache(path, true);
 
         var lastWrite = File.GetLastWriteTimeUtc(path);
-        return $"{lastWrite.Ticks:x}-{length:x}";
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{lastWrite.Ticks:x}-{length:x}");
     }
 
     /// <inheritdoc />

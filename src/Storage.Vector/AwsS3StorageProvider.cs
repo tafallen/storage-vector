@@ -30,6 +30,7 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     private readonly IAmazonS3 _s3;
     private readonly StorageOptions _options;
     private readonly bool _disposeClient;
+    private readonly Uri? _publicEndpointUri;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AwsS3StorageProvider" /> class.
@@ -52,6 +53,7 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
         _s3 = s3;
         _options = options.Value;
         _disposeClient = disposeClient;
+        _publicEndpointUri = string.IsNullOrWhiteSpace(_options.PublicBlobEndpoint) ? null : new Uri(_options.PublicBlobEndpoint);
     }
 
     /// <summary>
@@ -70,7 +72,7 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     private string BucketName => _options.Container;
 
     // Object key in single-bucket mode: container acts as a key prefix.
-    private static string ObjectKey(string container, string key) => $"{container}/{key}";
+    private static string ObjectKey(string container, string key) => string.Concat(container, "/", key);
 
     /// <inheritdoc />
     public async Task<string> PutObjectAsync(string container, string key, Stream data, string contentType, CancellationToken ct)
@@ -199,32 +201,53 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     /// <inheritdoc />
     public bool VerifyPresignedUrl(string url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
         // AWS SigV4 presigned URLs embed expiry as two query parameters:
         //   X-Amz-Date    — the signing moment  (format: yyyyMMddTHHmmssZ)
         //   X-Amz-Expires — validity window in seconds from that moment
         try
         {
             var uri = new Uri(url);
-            var query = uri.Query.TrimStart('?');
-
-            string? amzDate = null;
-            string? amzExpires = null;
-
-            foreach (var segment in query.Split('&'))
+            var querySpan = uri.Query.AsSpan();
+            if (querySpan.StartsWith("?"))
             {
-                var eq = segment.IndexOf('=');
-                if (eq <= 0) continue;
-
-                var k = segment.Substring(0, eq);
-                var v = Uri.UnescapeDataString(segment.Substring(eq + 1));
-
-                if (k.Equals("X-Amz-Date", StringComparison.OrdinalIgnoreCase))
-                    amzDate = v;
-                else if (k.Equals("X-Amz-Expires", StringComparison.OrdinalIgnoreCase))
-                    amzExpires = v;
+                querySpan = querySpan.Slice(1);
             }
 
-            if (amzDate is null || amzExpires is null) return false;
+            ReadOnlySpan<char> amzDate = default;
+            ReadOnlySpan<char> amzExpires = default;
+
+            while (!querySpan.IsEmpty)
+            {
+                int ampIndex = querySpan.IndexOf('&');
+                ReadOnlySpan<char> parameter = ampIndex == -1 ? querySpan : querySpan.Slice(0, ampIndex);
+                querySpan = ampIndex == -1 ? default : querySpan.Slice(ampIndex + 1);
+
+                int eqIndex = parameter.IndexOf('=');
+                if (eqIndex > 0)
+                {
+                    var keySpan = parameter.Slice(0, eqIndex);
+                    var valueSpan = parameter.Slice(eqIndex + 1);
+
+                    if (keySpan.Equals("X-Amz-Date", StringComparison.OrdinalIgnoreCase))
+                    {
+                        amzDate = valueSpan;
+                    }
+                    else if (keySpan.Equals("X-Amz-Expires", StringComparison.OrdinalIgnoreCase))
+                    {
+                        amzExpires = valueSpan;
+                    }
+                }
+            }
+
+            if (amzDate.IsEmpty || amzExpires.IsEmpty)
+            {
+                return false;
+            }
 
             if (!DateTimeOffset.TryParseExact(
                     amzDate,
@@ -232,9 +255,14 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.AssumeUniversal,
                     out var issuedAt))
+            {
                 return false;
+            }
 
-            if (!long.TryParse(amzExpires, out var expiresInSeconds)) return false;
+            if (!long.TryParse(amzExpires, NumberStyles.Integer, CultureInfo.InvariantCulture, out var expiresInSeconds))
+            {
+                return false;
+            }
 
             return issuedAt.AddSeconds(expiresInSeconds) > DateTimeOffset.UtcNow;
         }
@@ -246,17 +274,16 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
 
     private Uri RewriteToPublicEndpoint(Uri uri)
     {
-        if (string.IsNullOrWhiteSpace(_options.PublicBlobEndpoint))
+        if (_publicEndpointUri == null)
         {
             return uri;
         }
 
-        var publicEndpoint = new Uri(_options.PublicBlobEndpoint);
         var builder = new UriBuilder(uri)
         {
-            Scheme = publicEndpoint.Scheme,
-            Host = publicEndpoint.Host,
-            Port = publicEndpoint.Port,
+            Scheme = _publicEndpointUri.Scheme,
+            Host = _publicEndpointUri.Host,
+            Port = _publicEndpointUri.Port,
         };
 
         return builder.Uri;

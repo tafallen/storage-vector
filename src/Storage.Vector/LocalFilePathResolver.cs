@@ -55,7 +55,7 @@ public static class LocalFilePathResolver
         string resolved;
         if (!hasTraversals)
         {
-            resolved = Path.Combine(normalizedRootPath, container, key);
+            resolved = Path.Join(normalizedRootPath.AsSpan(), container.AsSpan(), key.AsSpan());
         }
         else
         {
