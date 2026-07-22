@@ -22,11 +22,13 @@ public class UrlSigningBenchmarks
         _signature = LocalFileUrlSigner.Compute(_signingKeyBytes, Container, Key, Expiry);
     }
 
+#pragma warning disable CS0618
     [Benchmark(Baseline = true)]
     public string ComputeSignatureOriginalStringKey()
     {
         return LocalFileUrlSigner.Compute(SigningKey, Container, Key, Expiry);
     }
+#pragma warning restore CS0618
 
     [Benchmark]
     public string ComputeSignatureOptimizedPreEncodedKey()
@@ -34,11 +36,13 @@ public class UrlSigningBenchmarks
         return LocalFileUrlSigner.Compute(_signingKeyBytes, Container, Key, Expiry);
     }
 
+#pragma warning disable CS0618
     [Benchmark]
     public bool VerifySignatureOriginalStringKey()
     {
         return LocalFileUrlSigner.Verify(SigningKey, Container, Key, Expiry, _signature);
     }
+#pragma warning restore CS0618
 
     [Benchmark]
     public bool VerifySignatureOptimizedPreEncodedKey()

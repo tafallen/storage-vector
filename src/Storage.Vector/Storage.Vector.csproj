@@ -36,6 +36,9 @@
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Storage.Vector.Tests</_Parameter1>
     </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Storage.Vector.Benchmarks</_Parameter1>
+    </AssemblyAttribute>
     <!-- Expose internals to FAMTree.Api.Tests during local development -->
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>FAMTree.Api.Tests</_Parameter1>
