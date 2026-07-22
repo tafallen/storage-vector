@@ -66,4 +66,34 @@ public class SecondaryStorageOptions
     /// Defaults to 65536 bytes (64KB).
     /// </summary>
     public int BufferSize { get; set; } = 65536;
+
+    // ── AWS S3 ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// AWS region, e.g. "eu-west-2". Required when Provider is "S3".
+    /// </summary>
+    public string? AwsRegion { get; set; }
+
+    /// <summary>
+    /// AWS access key ID. Omit to use the ambient IAM / environment credential chain.
+    /// </summary>
+    public string? AwsAccessKeyId { get; set; }
+
+    /// <summary>
+    /// AWS secret access key. Omit to use the ambient IAM / environment credential chain.
+    /// Must be set if <see cref="AwsAccessKeyId" /> is set, and omitted if it is not.
+    /// </summary>
+    public string? AwsSecretAccessKey { get; set; }
+
+    /// <summary>
+    /// Overrides the S3 endpoint URL. Use this for LocalStack (http://localhost:4566)
+    /// or other S3-compatible services (e.g. MinIO). Leave empty for standard AWS.
+    /// </summary>
+    public string? AwsServiceUrl { get; set; }
+
+    /// <summary>
+    /// When <see langword="true" />, forces path-style addressing for S3 requests.
+    /// Required for LocalStack and MinIO. Defaults to <see langword="false" />.
+    /// </summary>
+    public bool AwsForcePathStyle { get; set; } = false;
 }

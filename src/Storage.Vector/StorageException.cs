@@ -1,3 +1,4 @@
+using Amazon.S3;
 using Azure;
 
 namespace Storage.Vector;
@@ -82,5 +83,23 @@ public class StorageException : Exception
         };
 
         return new StorageException(kind, $"Storage operation failed: {ex.Message}", ex);
+    }
+
+    /// <summary>
+    /// Maps a raw AWS <see cref="AmazonS3Exception" /> to a structured <see cref="StorageException" />.
+    /// </summary>
+    /// <param name="ex">The Amazon S3 exception.</param>
+    /// <returns>A mapped storage exception.</returns>
+    public static StorageException FromAwsException(AmazonS3Exception ex)
+    {
+        var kind = (int)ex.StatusCode switch
+        {
+            404 => StorageErrorKind.NotFound,
+            401 or 403 => StorageErrorKind.AccessDenied,
+            >= 500 => StorageErrorKind.Unavailable,
+            _ => StorageErrorKind.Unknown,
+        };
+
+        return new StorageException(kind, $"S3 storage operation failed: {ex.Message}", ex);
     }
 }

@@ -1,3 +1,5 @@
+using Amazon.Runtime;
+using Amazon.S3;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,6 +62,33 @@ public static class StorageServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the AWS S3 storage provider and its configurations.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddAwsS3StorageProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<StorageOptions>()
+            .Bind(configuration.GetSection(StorageOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Container is required (used as the S3 bucket name).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AwsRegion), "Storage:AwsRegion is required when Storage:Provider is S3.")
+            .Validate(o => BothOrNeitherAwsCredentials(o.AwsAccessKeyId, o.AwsSecretAccessKey),
+                "Storage:AwsAccessKeyId and Storage:AwsSecretAccessKey must both be set, or both omitted.")
+            .ValidateOnStart();
+
+        services.AddSingleton<IAmazonS3>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
+            return BuildS3Client(options);
+        });
+
+        services.AddSingleton<IStorageProvider, AwsS3StorageProvider>();
+
+        return services;
+    }
+
+    /// <summary>
     /// Helper to check if the configured provider under the default "Storage" section is LocalFile.
     /// </summary>
     /// <param name="configuration">The configuration instance.</param>
@@ -77,7 +106,25 @@ public static class StorageServiceCollectionExtensions
         string.Equals(configuration[$"{sectionName}:Provider"], "LocalFile", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Helper to check if the configured provider under the default "Storage" section is S3.
+    /// </summary>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>True if Provider is S3, false otherwise.</returns>
+    public static bool UsesAwsS3Provider(IConfiguration configuration) =>
+        UsesAwsS3Provider(configuration, StorageOptions.SectionName);
+
+    /// <summary>
+    /// Helper to check if the configured provider under a specific section name is S3.
+    /// </summary>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <param name="sectionName">The section name containing the Provider key.</param>
+    /// <returns>True if Provider is S3, false otherwise.</returns>
+    public static bool UsesAwsS3Provider(IConfiguration configuration, string sectionName) =>
+        string.Equals(configuration[$"{sectionName}:Provider"], "S3", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Dynamically registers the primary storage provider based on configuration.
+    /// Supported values for <c>Storage:Provider</c> are <c>"LocalFile"</c>, <c>"S3"</c>, and <c>"AzureBlob"</c> (default).
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">The configuration instance.</param>
@@ -87,6 +134,10 @@ public static class StorageServiceCollectionExtensions
         if (UsesLocalFileProvider(configuration))
         {
             services.AddLocalFileStorageProvider(configuration);
+        }
+        else if (UsesAwsS3Provider(configuration))
+        {
+            services.AddAwsS3StorageProvider(configuration);
         }
         else
         {
@@ -109,6 +160,10 @@ public static class StorageServiceCollectionExtensions
         if (UsesLocalFileProvider(configuration, SecondaryStorageOptions.SectionName))
         {
             services.AddLocalFileSecondaryStorageProvider(configuration);
+        }
+        else if (UsesAwsS3Provider(configuration, SecondaryStorageOptions.SectionName))
+        {
+            services.AddAwsS3SecondaryStorageProvider(configuration);
         }
         else
         {
@@ -155,6 +210,27 @@ public static class StorageServiceCollectionExtensions
         return services;
     }
 
+    private static IServiceCollection AddAwsS3SecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<SecondaryStorageOptions>()
+            .Bind(configuration.GetSection(SecondaryStorageOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Secondary:Container is required (used as the S3 bucket name).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AwsRegion), "Storage:Secondary:AwsRegion is required when Storage:Secondary:Provider is S3.")
+            .Validate(o => BothOrNeitherAwsCredentials(o.AwsAccessKeyId, o.AwsSecretAccessKey),
+                "Storage:Secondary:AwsAccessKeyId and Storage:Secondary:AwsSecretAccessKey must both be set, or both omitted.")
+            .ValidateOnStart();
+
+        services.AddKeyedSingleton<IStorageProvider>(SecondaryProviderKey, (sp, _) =>
+        {
+            var secondaryOptions = sp.GetRequiredService<IOptions<SecondaryStorageOptions>>().Value;
+            var shaped = ToPrimaryShapedOptions(secondaryOptions);
+            var s3Client = BuildS3Client(shaped.Value);
+            return (IStorageProvider)new AwsS3StorageProvider(s3Client, shaped);
+        });
+
+        return services;
+    }
+
     /// <summary>
     /// Builds a StorageOptions-shaped IOptions of StorageOptions from a SecondaryStorageOptions instance.
     /// This allows reusing the existing provider constructors without modifications.
@@ -173,7 +249,47 @@ public static class StorageServiceCollectionExtensions
             PublicBaseUrl = secondary.PublicBaseUrl,
             LocalFileDownloadRoute = secondary.LocalFileDownloadRoute,
             BufferSize = secondary.BufferSize,
+            AwsRegion = secondary.AwsRegion,
+            AwsAccessKeyId = secondary.AwsAccessKeyId,
+            AwsSecretAccessKey = secondary.AwsSecretAccessKey,
+            AwsServiceUrl = secondary.AwsServiceUrl,
+            AwsForcePathStyle = secondary.AwsForcePathStyle,
         });
+
+    private static IAmazonS3 BuildS3Client(StorageOptions options)
+    {
+        var config = new AmazonS3Config
+        {
+            ForcePathStyle = options.AwsForcePathStyle,
+        };
+
+        if (!string.IsNullOrWhiteSpace(options.AwsServiceUrl))
+        {
+            // ServiceURL takes precedence over RegionEndpoint (mutually exclusive in the SDK).
+            // AuthenticationRegion is still needed for SigV4 signing against LocalStack/MinIO.
+            config.ServiceURL = options.AwsServiceUrl;
+            config.AuthenticationRegion = options.AwsRegion ?? "us-east-1";
+        }
+        else
+        {
+            config.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(options.AwsRegion!);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.AwsAccessKeyId) &&
+            !string.IsNullOrWhiteSpace(options.AwsSecretAccessKey))
+        {
+            return new AmazonS3Client(
+                new BasicAWSCredentials(options.AwsAccessKeyId, options.AwsSecretAccessKey),
+                config);
+        }
+
+        // Fall through to the ambient credential chain (env vars, IAM instance profile, etc.)
+        return new AmazonS3Client(config);
+    }
+
+    private static bool BothOrNeitherAwsCredentials(string? keyId, string? secretKey) =>
+        (string.IsNullOrWhiteSpace(keyId) && string.IsNullOrWhiteSpace(secretKey)) ||
+        (!string.IsNullOrWhiteSpace(keyId) && !string.IsNullOrWhiteSpace(secretKey));
 
     private static bool IsValidConnectionString(string? connectionString)
     {

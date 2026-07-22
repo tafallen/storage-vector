@@ -15,6 +15,7 @@ A portable **.NET 8** storage provider abstraction and implementations for Azure
 - 🔒 **Path traversal protection** — local provider containment checks prevent directory breakout attacks
 - 👯 **Keyed secondary mirroring** — configure and inject independent backup/sync storage targets via keyed DI
 - 🔑 **Presigned URLs** — generate signed download URLs (HMAC-SHA256 signatures for LocalFile, SAS tokens for Azure)
+- ☁️ **AWS S3 support** — first-class S3 provider with single-bucket mode (`container` = key prefix), presigned URL generation, and LocalStack / MinIO compatibility via `AwsServiceUrl`
 - 🚀 **High Performance & Zero-Allocation** — optimized via thread-safe in-memory metadata caches, pre-computed path normalizations, and span-based zero-allocation url signing
 - ⚙️ **Startup validation** — throws clear errors on application boot if options or paths are missing
 - 📦 **NuGet-ready** — structured for `dotnet pack` with symbols (`.snupkg`)
@@ -54,6 +55,24 @@ Configure the provider options in your settings:
   }
 }
 ```
+
+### AWS S3
+
+```json
+{
+  "Storage": {
+    "Provider": "S3",
+    "Container": "my-app-bucket",
+    "AwsRegion": "eu-west-2",
+    "AwsAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
+    "AwsSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  }
+}
+```
+
+> **LocalStack / MinIO**: Add `"AwsServiceUrl": "http://localhost:4566"` and `"AwsForcePathStyle": true` to target a local S3-compatible endpoint. Omit `AwsAccessKeyId` / `AwsSecretAccessKey` entirely to use the ambient IAM credential chain (ECS task role, EC2 instance profile, etc.).
+
+Object keys are namespaced as `{container}/{key}` within the configured S3 bucket, so a single bucket can serve multiple logical containers.
 
 ### Upload and Download Files
 

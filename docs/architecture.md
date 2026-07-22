@@ -99,8 +99,19 @@ classDiagram
         +VerifyUrl(urlWithSignature) bool
     }
 
+    class AwsS3StorageProvider {
+        -IAmazonS3 _s3
+        -StorageOptions _options
+        +PutObjectAsync(...) Task~string~
+        +GetObjectAsync(...) Task~Stream~
+        +DeleteObjectAsync(...) Task
+        +GetPresignedUrlAsync(...) Task~Uri~
+        +EnsureContainerExistsAsync(...) Task
+    }
+
     IStorageProvider <|.. AzureBlobStorageProvider
     IStorageProvider <|.. LocalFileStorageProvider
+    IStorageProvider <|.. AwsS3StorageProvider
     IStorageContainer <|.. StorageContainer
     IStorageObject <|.. StorageObject
     StorageContainer ..> StorageObject : Resolves
@@ -121,8 +132,9 @@ classDiagram
 - **`LocalFilePathResolver`**: Implements path-traversal containment checks. It supports both standard checking and an optimized fast-path check that bypasses `Path.GetFullPath` entirely when no relative traversal elements (like `..`, `:`, or starting separators) are detected.
 - **`LocalFileUrlSigner`**: Signs download URLs using HMAC-SHA256 with a pre-encoded private key, incorporating expiration timestamps. It leverages stateless `.NET 8` cryptographic APIs (`HMACSHA256.HashData`) and zero-allocation span formatting to sign and verify URLs without heap allocations.
 
-### C. Azure Blob Storage Components
+### C. Cloud Provider Components
 - **`AzureBlobStorageProvider`**: Wraps the Azure SDK's `BlobServiceClient`. It handles blob operations, SAS token generation, and maps Azure exceptions to `StorageException`. When running under Entra ID token-based authentication, it implements a thread-safe sliding cache for Azure's `UserDelegationKey` using a Semaphore lock to eliminate redundant network roundtrips to Azure storage for key fetching.
+- **`AwsS3StorageProvider`**: Wraps `IAmazonS3` from the AWS SDK. Uses a single configured S3 bucket (`StorageOptions.Container`) where the `container` method argument becomes a key prefix (`{container}/{key}`). Supports explicit credentials or the ambient IAM credential chain. `VerifyPresignedUrl` decodes SigV4 `X-Amz-Date` + `X-Amz-Expires` parameters to check expiry without making a network call. LocalStack and MinIO are supported via `AwsServiceUrl` and `AwsForcePathStyle`.
 
 ### D. Fluent Interface Layer
 - **`IStorageContainer` & `IStorageObject`**: Contextual client contracts representing container-level and object-level boundaries.

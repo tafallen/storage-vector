@@ -42,3 +42,5 @@ TestResults/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+BenchmarkDotNet.Artifacts/
