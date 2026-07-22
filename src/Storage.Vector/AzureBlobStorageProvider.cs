@@ -189,24 +189,88 @@ public class AzureBlobStorageProvider : IStorageProvider
     /// <inheritdoc />
     public bool VerifyPresignedUrl(string url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
         try
         {
             var uri = new Uri(url);
-            var query = uri.Query.TrimStart('?').Split('&');
-            foreach (var part in query)
+            var querySpan = uri.Query.AsSpan();
+            if (querySpan.StartsWith("?"))
             {
-                var kv = part.Split('=');
-                if (kv.Length == 2 && kv[0] == "se")
+                querySpan = querySpan.Slice(1);
+            }
+
+            ReadOnlySpan<char> sig = default;
+            ReadOnlySpan<char> se = default;
+            ReadOnlySpan<char> sp = default;
+            ReadOnlySpan<char> sv = default;
+
+            while (!querySpan.IsEmpty)
+            {
+                int ampIndex = querySpan.IndexOf('&');
+                ReadOnlySpan<char> parameter = ampIndex == -1 ? querySpan : querySpan.Slice(0, ampIndex);
+                querySpan = ampIndex == -1 ? default : querySpan.Slice(ampIndex + 1);
+
+                int eqIndex = parameter.IndexOf('=');
+                if (eqIndex != -1)
                 {
-                    var decoded = Uri.UnescapeDataString(kv[1]);
-                    if (DateTimeOffset.TryParse(decoded, out var expiry))
+                    var keySpan = parameter.Slice(0, eqIndex);
+                    var valueSpan = parameter.Slice(eqIndex + 1);
+
+                    if (keySpan.Equals("sig", StringComparison.Ordinal))
                     {
-                        return expiry > DateTimeOffset.UtcNow;
+                        sig = valueSpan;
+                    }
+                    else if (keySpan.Equals("se", StringComparison.Ordinal))
+                    {
+                        se = valueSpan;
+                    }
+                    else if (keySpan.Equals("sp", StringComparison.Ordinal))
+                    {
+                        sp = valueSpan;
+                    }
+                    else if (keySpan.Equals("sv", StringComparison.Ordinal))
+                    {
+                        sv = valueSpan;
                     }
                 }
             }
 
-            return false;
+            if (sig.IsEmpty || se.IsEmpty || sp.IsEmpty || sv.IsEmpty)
+            {
+                return false;
+            }
+
+            var decodedSig = Uri.UnescapeDataString(sig.ToString());
+            if (string.IsNullOrWhiteSpace(decodedSig))
+            {
+                return false;
+            }
+
+            // Validate that the signature is valid Base64
+            Span<byte> buffer = stackalloc byte[256];
+            if (!Convert.TryFromBase64String(decodedSig, buffer, out _))
+            {
+                try
+                {
+                    _ = Convert.FromBase64String(decodedSig);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            var decodedSe = Uri.UnescapeDataString(se.ToString());
+            if (!DateTimeOffset.TryParse(decodedSe, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var expiry))
+            {
+                return false;
+            }
+
+            return expiry > DateTimeOffset.UtcNow;
         }
         catch (Exception)
         {

@@ -238,23 +238,7 @@ public static class StorageServiceCollectionExtensions
     /// <param name="secondary">The secondary storage options instance.</param>
     /// <returns>A mapped IOptions wrapped StorageOptions instance.</returns>
     public static IOptions<StorageOptions> ToPrimaryShapedOptions(SecondaryStorageOptions secondary) =>
-        Options.Create(new StorageOptions
-        {
-            ConnectionString = secondary.ConnectionString,
-            Container = secondary.Container,
-            PublicBlobEndpoint = secondary.PublicBlobEndpoint,
-            Provider = secondary.Provider,
-            RootPath = secondary.RootPath,
-            SigningKey = secondary.SigningKey,
-            PublicBaseUrl = secondary.PublicBaseUrl,
-            LocalFileDownloadRoute = secondary.LocalFileDownloadRoute,
-            BufferSize = secondary.BufferSize,
-            AwsRegion = secondary.AwsRegion,
-            AwsAccessKeyId = secondary.AwsAccessKeyId,
-            AwsSecretAccessKey = secondary.AwsSecretAccessKey,
-            AwsServiceUrl = secondary.AwsServiceUrl,
-            AwsForcePathStyle = secondary.AwsForcePathStyle,
-        });
+        Options.Create(new StorageOptions(secondary));
 
     private static IAmazonS3 BuildS3Client(StorageOptions options)
     {

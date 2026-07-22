@@ -11,7 +11,7 @@ namespace Storage.Vector;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A single S3 bucket (configured via <see cref="StorageOptions.Container" />) is used for all operations.
+/// A single S3 bucket (configured via <see cref="StorageOptionsBase.Container" />) is used for all operations.
 /// The <c>container</c> parameter passed to each method acts as a key-prefix namespace:
 /// the S3 object key is <c>{container}/{key}</c>.
 /// </para>

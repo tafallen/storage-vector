@@ -3,7 +3,7 @@ namespace Storage.Vector;
 /// <summary>
 /// Configuration options for the primary storage provider.
 /// </summary>
-public class StorageOptions
+public class StorageOptions : StorageOptionsBase
 {
     /// <summary>
     /// The default configuration section name for primary storage options.
@@ -11,85 +11,23 @@ public class StorageOptions
     public const string SectionName = "Storage";
 
     /// <summary>
-    /// The connection string to the Azure Blob Storage account or local Azurite emulator.
-    /// </summary>
-    public string ConnectionString { get; set; } = string.Empty;
-
-    /// <summary>
-    /// The default container or root folder name where files are uploaded.
-    /// </summary>
-    public string Container { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Optional endpoint override (e.g. a CDN or local proxy) to rewrite presigned SAS URLs.
-    /// Preserves the path and query string parameters (including SAS tokens) untouched.
-    /// </summary>
-    public string? PublicBlobEndpoint { get; set; }
-
-    /// <summary>
-    /// Which storage engine provider to register: "AzureBlob" (default) or "LocalFile".
-    /// </summary>
-    public string Provider { get; set; } = "AzureBlob";
-
-    /// <summary>
-    /// Absolute directory path where files are stored under on the local filesystem (used only when Provider is "LocalFile").
-    /// </summary>
-    public string? RootPath { get; set; }
-
-    /// <summary>
-    /// HMAC-SHA256 secret key used to sign and verify presigned download URLs (used only when Provider is "LocalFile").
-    /// </summary>
-    public string? SigningKey { get; set; }
-
-    /// <summary>
-    /// Base URL (scheme, host, and port) used to construct local presigned URLs, e.g. "https://localhost:5001" (used only when Provider is "LocalFile").
-    /// </summary>
-    public string? PublicBaseUrl { get; set; }
-
-    /// <summary>
-    /// The route path segment used to generate and route local file download requests (used only when Provider is "LocalFile").
-    /// Defaults to "api/v1/media/local-file".
-    /// </summary>
-    public string LocalFileDownloadRoute { get; set; } = "api/v1/media/local-file";
-
-    /// <summary>
-    /// The buffer size in bytes used when reading and writing files asynchronously on the local filesystem (used only when Provider is "LocalFile").
-    /// Defaults to 65536 bytes (64KB).
-    /// </summary>
-    public int BufferSize { get; set; } = 65536;
-
-    /// <summary>
     /// Gating flag to control whether a secondary storage provider is registered under the keyed slot "secondary".
     /// </summary>
     public bool SyncEnabled { get; set; } = false;
 
-    // ── AWS S3 ───────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StorageOptions"/> class.
+    /// </summary>
+    public StorageOptions()
+    {
+    }
 
     /// <summary>
-    /// AWS region, e.g. "eu-west-2". Required when Provider is "S3".
+    /// Initializes a new instance of the <see cref="StorageOptions"/> class by copying properties from a base options instance.
     /// </summary>
-    public string? AwsRegion { get; set; }
-
-    /// <summary>
-    /// AWS access key ID. Omit to use the ambient IAM / environment credential chain.
-    /// </summary>
-    public string? AwsAccessKeyId { get; set; }
-
-    /// <summary>
-    /// AWS secret access key. Omit to use the ambient IAM / environment credential chain.
-    /// Must be set if <see cref="AwsAccessKeyId" /> is set, and omitted if it is not.
-    /// </summary>
-    public string? AwsSecretAccessKey { get; set; }
-
-    /// <summary>
-    /// Overrides the S3 endpoint URL. Use this for LocalStack (http://localhost:4566)
-    /// or other S3-compatible services (e.g. MinIO). Leave empty for standard AWS.
-    /// </summary>
-    public string? AwsServiceUrl { get; set; }
-
-    /// <summary>
-    /// When <see langword="true" />, forces path-style addressing for S3 requests.
-    /// Required for LocalStack and MinIO. Defaults to <see langword="false" />.
-    /// </summary>
-    public bool AwsForcePathStyle { get; set; } = false;
+    /// <param name="other">The options instance to copy from.</param>
+    public StorageOptions(StorageOptionsBase other)
+    {
+        CopyFrom(other);
+    }
 }

@@ -302,6 +302,114 @@ public class AzureBlobStorageProviderTests
 
         Assert.Equal(StorageErrorKind.NotFound, ex.Kind);
     }
+
+    // ─── VerifyPresignedUrl Tests ──────────────────────────────────────────────
+
+    [Fact]
+    public void VerifyPresignedUrl_ValidSasUrl_ReturnsTrue()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var validSig = Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 });
+        var url = $"https://account.blob.core.windows.net/container/file.txt?sp=r&st=2026-01-01T00:00:00Z&se={Uri.EscapeDataString(expiry)}&sv=2020-08-04&sr=b&sig={Uri.EscapeDataString(validSig)}";
+
+        Assert.True(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_ExpiredSasUrl_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(-10).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var validSig = Convert.ToBase64String(new byte[] { 1, 2, 3 });
+        var url = $"https://account.blob.core.windows.net/container/file.txt?sp=r&se={Uri.EscapeDataString(expiry)}&sv=2020-08-04&sig={Uri.EscapeDataString(validSig)}";
+
+        Assert.False(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_MissingSig_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var url = $"https://account.blob.core.windows.net/container/file.txt?sp=r&se={Uri.EscapeDataString(expiry)}&sv=2020-08-04";
+
+        Assert.False(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_InvalidBase64Sig_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var url = $"https://account.blob.core.windows.net/container/file.txt?sp=r&se={Uri.EscapeDataString(expiry)}&sv=2020-08-04&sig=not-valid-base64!!!";
+
+        Assert.False(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_MissingExpiry_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var validSig = Convert.ToBase64String(new byte[] { 1, 2, 3 });
+        var url = $"https://account.blob.core.windows.net/container/file.txt?sp=r&sv=2020-08-04&sig={Uri.EscapeDataString(validSig)}";
+
+        Assert.False(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_MissingPermissions_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var validSig = Convert.ToBase64String(new byte[] { 1, 2, 3 });
+        var url = $"https://account.blob.core.windows.net/container/file.txt?se={Uri.EscapeDataString(expiry)}&sv=2020-08-04&sig={Uri.EscapeDataString(validSig)}";
+
+        Assert.False(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_MissingServiceVersion_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var validSig = Convert.ToBase64String(new byte[] { 1, 2, 3 });
+        var url = $"https://account.blob.core.windows.net/container/file.txt?sp=r&se={Uri.EscapeDataString(expiry)}&sig={Uri.EscapeDataString(validSig)}";
+
+        Assert.False(provider.VerifyPresignedUrl(url));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_MalformedUrl_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        Assert.False(provider.VerifyPresignedUrl("not-a-valid-url"));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_EmptyString_ReturnsFalse()
+    {
+        var mockService = new Mock<BlobServiceClient>();
+        var provider = new AzureBlobStorageProvider(mockService.Object, Options.Create(new StorageOptions()));
+
+        Assert.False(provider.VerifyPresignedUrl(string.Empty));
+    }
 }
 
 
