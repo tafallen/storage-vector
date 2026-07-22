@@ -44,11 +44,7 @@ public class LocalFileStorageProvider : IStorageProvider
     {
         var path = ResolvePath(container, key);
         var dir = Path.GetDirectoryName(path)!;
-        if (!_createdDirectories.TryGetValue(dir, out _))
-        {
-            Directory.CreateDirectory(dir);
-            _createdDirectories.TryAdd(dir, true);
-        }
+        EnsureDirectoryCreated(dir);
 
         long length;
         try
@@ -168,11 +164,7 @@ public class LocalFileStorageProvider : IStorageProvider
         try
         {
             var dir = Path.Combine(_normalizedRootPath, container);
-            if (!_createdDirectories.TryGetValue(dir, out _))
-            {
-                Directory.CreateDirectory(dir);
-                _createdDirectories.TryAdd(dir, true);
-            }
+            EnsureDirectoryCreated(dir);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -271,5 +263,18 @@ public class LocalFileStorageProvider : IStorageProvider
             _fileExistenceCache.Clear();
         }
         _fileExistenceCache[path] = exists;
+    }
+
+    private void EnsureDirectoryCreated(string dir)
+    {
+        if (!_createdDirectories.TryGetValue(dir, out _))
+        {
+            Directory.CreateDirectory(dir);
+            if (_createdDirectories.Count >= 1000)
+            {
+                _createdDirectories.Clear();
+            }
+            _createdDirectories.TryAdd(dir, true);
+        }
     }
 }

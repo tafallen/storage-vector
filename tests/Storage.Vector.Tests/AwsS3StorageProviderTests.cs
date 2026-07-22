@@ -210,6 +210,70 @@ public class AwsS3StorageProviderTests
         Assert.Equal("photos/summer/img.jpg", captured.Key);
     }
 
+    [Fact]
+    public async Task GetObjectAsync_Success_ReturnsResponseStream()
+    {
+        var expectedBytes = new byte[] { 10, 20, 30 };
+        var s3 = new Mock<IAmazonS3>();
+        s3.Setup(x => x.GetObjectAsync(It.IsAny<GetObjectRequest>(), It.IsAny<CancellationToken>()))
+          .ReturnsAsync(new GetObjectResponse { ResponseStream = new MemoryStream(expectedBytes) });
+
+        var provider = BuildProvider(s3.Object);
+        await using var stream = await provider.GetObjectAsync("photos", "sample.png", CancellationToken.None);
+
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        Assert.Equal(expectedBytes, ms.ToArray());
+    }
+
+    [Fact]
+    public async Task GetPresignedUrlAsync_PublicBlobEndpointConfigured_RewritesHostAndScheme()
+    {
+        var s3 = new Mock<IAmazonS3>();
+        s3.Setup(x => x.GetPreSignedURL(It.IsAny<GetPreSignedUrlRequest>()))
+          .Returns("https://s3.eu-west-2.amazonaws.com/my-test-bucket/photos/img.jpg?X-Amz-Expires=3600");
+
+        var options = Options.Create(new StorageOptions
+        {
+            Container = "my-test-bucket",
+            AwsRegion = "eu-west-2",
+            PublicBlobEndpoint = "https://cdn.example.com:8443",
+        });
+
+        var provider = new AwsS3StorageProvider(s3.Object, options);
+        var url = await provider.GetPresignedUrlAsync("photos", "img.jpg", TimeSpan.FromMinutes(15), CancellationToken.None);
+
+        Assert.Equal("https", url.Scheme);
+        Assert.Equal("cdn.example.com", url.Host);
+        Assert.Equal(8443, url.Port);
+        Assert.Equal("/my-test-bucket/photos/img.jpg", url.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task EnsureContainerExistsAsync_WhenS3ThrowsGeneralException_ThrowsStorageException()
+    {
+        var s3 = new Mock<IAmazonS3>();
+        s3.Setup(x => x.PutBucketAsync(It.IsAny<PutBucketRequest>(), It.IsAny<CancellationToken>()))
+          .ThrowsAsync(new AmazonS3Exception("Access Denied") { StatusCode = HttpStatusCode.Forbidden });
+
+        var provider = BuildProvider(s3.Object);
+        var ex = await Assert.ThrowsAsync<StorageException>(() =>
+            provider.EnsureContainerExistsAsync("photos", CancellationToken.None));
+
+        Assert.Equal(StorageErrorKind.AccessDenied, ex.Kind);
+    }
+
+    [Fact]
+    public async Task VerifyPresignedUrlAsync_ValidUrl_ReturnsTrue()
+    {
+        IStorageProvider provider = BuildProvider();
+        var amzDate = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("yyyyMMddTHHmmssZ");
+        var url = $"https://my-bucket.s3.eu-west-2.amazonaws.com/photos/img.jpg?X-Amz-Date={amzDate}&X-Amz-Expires=3600";
+
+        var result = await provider.VerifyPresignedUrlAsync(url);
+        Assert.True(result);
+    }
+
     // ─── LocalStack integration (skipped unless S3_INTEGRATION=true) ─────────
 
     private const string IntegrationSkipReason =

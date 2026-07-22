@@ -67,7 +67,7 @@ public class LocalFileStorageProviderTests : IDisposable
             .Select(p => p.Split('='))
             .ToDictionary(parts => parts[0], parts => Uri.UnescapeDataString(parts[1]));
         var expires = long.Parse(queryParams["expires"]!);
-        Assert.True(LocalFileUrlSigner.Verify("shared-key", "famtree-media", "events/E001/cert.jpg", expires, queryParams["sig"]!));
+        Assert.True(LocalFileUrlSigner.Verify(System.Text.Encoding.UTF8.GetBytes("shared-key"), "famtree-media", "events/E001/cert.jpg", expires, queryParams["sig"]!));
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class LocalFileStorageProviderTests : IDisposable
 
         // Compute an expired URL directly (expires 10 seconds ago)
         var expiresAt = DateTimeOffset.UtcNow.AddSeconds(-10).ToUnixTimeSeconds();
-        var signature = LocalFileUrlSigner.Compute("test-signing-key", "famtree-media", "events/E001/cert.jpg", expiresAt);
+        var signature = LocalFileUrlSigner.Compute(System.Text.Encoding.UTF8.GetBytes("test-signing-key"), "famtree-media", "events/E001/cert.jpg", expiresAt);
         var url = $"http://localhost:8080/api/v1/media/local-file/famtree-media/events/E001/cert.jpg?expires={expiresAt}&sig={signature}";
 
         var isValid = provider.VerifyPresignedUrl(url);

@@ -153,6 +153,10 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// In single-bucket mode, the method operates on the configured S3 bucket (<see cref="StorageOptionsBase.Container"/>),
+    /// creating the bucket if it does not already exist. The <paramref name="container"/> parameter acts as a key prefix for objects.
+    /// </remarks>
     public async Task EnsureContainerExistsAsync(string container, CancellationToken ct)
     {
         // In single-bucket mode the `container` arg is a key prefix — not a real S3 bucket.

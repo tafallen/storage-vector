@@ -27,7 +27,7 @@ public static class LocalFilePathResolver
     /// <summary>
     /// Resolves container/key using pre-normalized root paths to avoid expensive root path I/O resolution calls.
     /// </summary>
-    public static string ResolveContainedFast(string normalizedRootPath, string rootPathWithSeparator, string container, string key)
+    internal static string ResolveContainedFast(string normalizedRootPath, string rootPathWithSeparator, string container, string key)
     {
         if (string.IsNullOrWhiteSpace(container))
         {

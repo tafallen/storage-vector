@@ -84,18 +84,11 @@ public class StorageServiceCollectionExtensionsTests
         Assert.Equal("/data/media", options.RootPath);
     }
 
-    // Mirrors Program.cs's own conditional wiring: AddSecondaryStorageProvider is only ever
-    // called when Storage:SyncEnabled is true.
     private static ServiceProvider BuildProviderWithOptionalSecondary(IDictionary<string, string?> configValues)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(configValues).Build();
         var services = new ServiceCollection();
         services.AddStorageProvider(configuration);
-        if (configuration.GetValue<bool>("Storage:SyncEnabled"))
-        {
-            services.AddSecondaryStorageProvider(configuration);
-        }
-
         return services.BuildServiceProvider();
     }
 
@@ -225,6 +218,25 @@ public class StorageServiceCollectionExtensionsTests
         }).Build();
 
         Assert.True(StorageServiceCollectionExtensions.UsesAwsS3Provider(config));
+    }
+
+    [Fact]
+    public void AddStorageProvider_DoubleRegistration_ThrowsInvalidOperationException()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "LocalFile",
+            ["Storage:Container"] = "c1",
+            ["Storage:RootPath"] = "/data",
+            ["Storage:SigningKey"] = "key",
+            ["Storage:PublicBaseUrl"] = "http://localhost",
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddStorageProvider(config);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddStorageProvider(config));
+        Assert.Contains("primary storage provider has already been registered", ex.Message);
     }
 }
 

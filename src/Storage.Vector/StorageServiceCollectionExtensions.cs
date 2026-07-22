@@ -23,6 +23,8 @@ public static class StorageServiceCollectionExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddAzureBlobStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
+        services.EnsureNotAlreadyRegistered();
+
         services.AddOptions<StorageOptions>()
             .Bind(configuration.GetSection(StorageOptions.SectionName))
             .Validate(o => IsValidConnectionString(o.ConnectionString), "Storage:ConnectionString is missing or malformed.")
@@ -48,6 +50,8 @@ public static class StorageServiceCollectionExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddLocalFileStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
+        services.EnsureNotAlreadyRegistered();
+
         services.AddOptions<StorageOptions>()
             .Bind(configuration.GetSection(StorageOptions.SectionName))
             .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Container is missing.")
@@ -69,6 +73,7 @@ public static class StorageServiceCollectionExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddAwsS3StorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
+        services.EnsureNotAlreadyRegistered();
         services.AddOptions<StorageOptions>()
             .Bind(configuration.GetSection(StorageOptions.SectionName))
             .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Container is required (used as the S3 bucket name).")
@@ -190,6 +195,8 @@ public static class StorageServiceCollectionExtensions
 
     private static IServiceCollection AddAzureBlobSecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
+        services.EnsureNotAlreadyRegistered(SecondaryProviderKey);
+
         services.AddOptions<SecondaryStorageOptions>()
             .Bind(configuration.GetSection(SecondaryStorageOptions.SectionName))
             .Validate(o => IsValidConnectionString(o.ConnectionString), "Storage:Secondary:ConnectionString is missing or malformed.")
@@ -208,6 +215,8 @@ public static class StorageServiceCollectionExtensions
 
     private static IServiceCollection AddLocalFileSecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
+        services.EnsureNotAlreadyRegistered(SecondaryProviderKey);
+
         services.AddOptions<SecondaryStorageOptions>()
             .Bind(configuration.GetSection(SecondaryStorageOptions.SectionName))
             .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Secondary:Container is missing.")
@@ -227,6 +236,8 @@ public static class StorageServiceCollectionExtensions
 
     private static IServiceCollection AddAwsS3SecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
+        services.EnsureNotAlreadyRegistered(SecondaryProviderKey);
+
         services.AddOptions<SecondaryStorageOptions>()
             .Bind(configuration.GetSection(SecondaryStorageOptions.SectionName))
             .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Secondary:Container is required (used as the S3 bucket name).")
@@ -320,5 +331,18 @@ public static class StorageServiceCollectionExtensions
                connectionString.Contains("AccountName=", StringComparison.OrdinalIgnoreCase) ||
                connectionString.Contains("BlobEndpoint=", StringComparison.OrdinalIgnoreCase) ||
                connectionString.Contains("DefaultEndpointsProtocol=", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void EnsureNotAlreadyRegistered(this IServiceCollection services, object? serviceKey = null)
+    {
+        bool alreadyRegistered = services.Any(d =>
+            d.ServiceType == typeof(IStorageProvider) &&
+            Equals(d.ServiceKey, serviceKey));
+
+        if (alreadyRegistered)
+        {
+            var slot = serviceKey == null ? "primary" : $"secondary (key: '{serviceKey}')";
+            throw new InvalidOperationException($"A {slot} storage provider has already been registered in the service collection.");
+        }
     }
 }

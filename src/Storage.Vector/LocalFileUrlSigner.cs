@@ -18,6 +18,7 @@ public static class LocalFileUrlSigner
     /// <param name="key">The object key.</param>
     /// <param name="expiresAtUnixSeconds">The expiration timestamp in Unix seconds.</param>
     /// <returns>A lowercase hexadecimal signature string.</returns>
+    [Obsolete("Prefer the ReadOnlySpan<byte> overload for zero-allocation performance.")]
     public static string Compute(string signingKey, string container, string key, long expiresAtUnixSeconds)
     {
         if (signingKey == null) throw new ArgumentNullException(nameof(signingKey));
@@ -81,6 +82,7 @@ public static class LocalFileUrlSigner
     /// <param name="expiresAtUnixSeconds">The expiration timestamp in Unix seconds.</param>
     /// <param name="providedSignatureHex">The hexadecimal signature provided by the client.</param>
     /// <returns>True if the signature matches, false otherwise.</returns>
+    [Obsolete("Prefer the ReadOnlySpan<byte> overload for zero-allocation performance.")]
     public static bool Verify(string signingKey, string container, string key, long expiresAtUnixSeconds, string providedSignatureHex)
     {
         if (signingKey == null) throw new ArgumentNullException(nameof(signingKey));
@@ -155,27 +157,14 @@ public static class LocalFileUrlSigner
 
     private static string ConvertToHexLower(ReadOnlySpan<byte> bytes)
     {
-        return string.Create(64, (Part1: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(0, 8)),
-                                  Part2: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(8, 8)),
-                                  Part3: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(16, 8)),
-                                  Part4: System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(24, 8))), 
-            (span, state) =>
-            {
-                WriteUlongHex(state.Part1, span.Slice(0, 16));
-                WriteUlongHex(state.Part2, span.Slice(16, 16));
-                WriteUlongHex(state.Part3, span.Slice(32, 16));
-                WriteUlongHex(state.Part4, span.Slice(48, 16));
-            });
-    }
-
-    private static void WriteUlongHex(ulong val, Span<char> dest)
-    {
-        for (int i = 0; i < 8; i++)
+        return string.Create(bytes.Length * 2, bytes.ToArray(), (span, b) =>
         {
-            byte b = (byte)(val >> (i * 8));
-            dest[i * 2] = GetHexChar(b >> 4);
-            dest[i * 2 + 1] = GetHexChar(b & 0x0F);
-        }
+            for (int i = 0; i < b.Length; i++)
+            {
+                span[i * 2] = GetHexChar(b[i] >> 4);
+                span[i * 2 + 1] = GetHexChar(b[i] & 0x0F);
+            }
+        });
     }
 
     private static char GetHexChar(int value)
