@@ -29,6 +29,7 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
 
     private readonly IAmazonS3 _s3;
     private readonly StorageOptions _options;
+    private readonly bool _disposeClient;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AwsS3StorageProvider" /> class.
@@ -36,9 +37,21 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     /// <param name="s3">The Amazon S3 client.</param>
     /// <param name="options">The storage configuration options.</param>
     public AwsS3StorageProvider(IAmazonS3 s3, IOptions<StorageOptions> options)
+        : this(s3, options, disposeClient: true)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AwsS3StorageProvider" /> class with client disposal configuration.
+    /// </summary>
+    /// <param name="s3">The Amazon S3 client.</param>
+    /// <param name="options">The storage configuration options.</param>
+    /// <param name="disposeClient">Whether to dispose the S3 client when this provider is disposed.</param>
+    public AwsS3StorageProvider(IAmazonS3 s3, IOptions<StorageOptions> options, bool disposeClient)
     {
         _s3 = s3;
         _options = options.Value;
+        _disposeClient = disposeClient;
     }
 
     /// <summary>
@@ -46,7 +59,10 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     /// </summary>
     public void Dispose()
     {
-        _s3.Dispose();
+        if (_disposeClient)
+        {
+            _s3.Dispose();
+        }
         GC.SuppressFinalize(this);
     }
 

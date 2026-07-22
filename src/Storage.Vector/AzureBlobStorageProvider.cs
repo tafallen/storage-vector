@@ -260,7 +260,7 @@ public class AzureBlobStorageProvider : IStorageProvider, IDisposable
             }
 
             // Validate that the signature is valid Base64
-            Span<byte> buffer = stackalloc byte[256];
+            Span<byte> buffer = stackalloc byte[512];
             if (!Convert.TryFromBase64String(decodedSig, buffer, out _))
             {
                 try

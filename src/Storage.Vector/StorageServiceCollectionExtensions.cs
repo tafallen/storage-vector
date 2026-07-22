@@ -88,7 +88,12 @@ public static class StorageServiceCollectionExtensions
             return BuildS3Client(options);
         });
 
-        services.AddSingleton<IStorageProvider, AwsS3StorageProvider>();
+        services.AddSingleton<IStorageProvider>(sp =>
+        {
+            var s3 = sp.GetRequiredService<IAmazonS3>();
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>();
+            return new AwsS3StorageProvider(s3, options, disposeClient: false);
+        });
 
         return services;
     }

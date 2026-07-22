@@ -258,11 +258,10 @@ public class LocalFileStorageProvider : IStorageProvider
 
     private void SetFileExistenceCache(string path, bool exists)
     {
-        if (_fileExistenceCache.Count >= _options.FileExistenceCacheCapacity)
+        if (_fileExistenceCache.ContainsKey(path) || _fileExistenceCache.Count < _options.FileExistenceCacheCapacity)
         {
-            _fileExistenceCache.Clear();
+            _fileExistenceCache[path] = exists;
         }
-        _fileExistenceCache[path] = exists;
     }
 
     private void EnsureDirectoryCreated(string dir)
@@ -270,11 +269,10 @@ public class LocalFileStorageProvider : IStorageProvider
         if (!_createdDirectories.TryGetValue(dir, out _))
         {
             Directory.CreateDirectory(dir);
-            if (_createdDirectories.Count >= 1000)
+            if (_createdDirectories.Count < 1000)
             {
-                _createdDirectories.Clear();
+                _createdDirectories.TryAdd(dir, true);
             }
-            _createdDirectories.TryAdd(dir, true);
         }
     }
 }
