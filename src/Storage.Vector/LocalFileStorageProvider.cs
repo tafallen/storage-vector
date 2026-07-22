@@ -69,7 +69,7 @@ public class LocalFileStorageProvider : IStorageProvider
             throw new StorageException(StorageErrorKind.Unavailable, $"Could not write object '{container}/{key}'.", ex);
         }
 
-        _fileExistenceCache[path] = true;
+        SetFileExistenceCache(path, true);
 
         var lastWrite = File.GetLastWriteTimeUtc(path);
         return $"{lastWrite.Ticks:x}-{length:x}";
@@ -85,7 +85,7 @@ public class LocalFileStorageProvider : IStorageProvider
         if (!_fileExistenceCache.TryGetValue(path, out var exists))
         {
             exists = File.Exists(path);
-            _fileExistenceCache[path] = exists;
+            SetFileExistenceCache(path, exists);
         }
 
         if (!exists)
@@ -121,12 +121,12 @@ public class LocalFileStorageProvider : IStorageProvider
                 useAsync: true);
             
             // If successfully opened, we can safely cache that the file exists
-            _fileExistenceCache[path] = true;
+            SetFileExistenceCache(path, true);
             return Task.FromResult(stream);
         }
         catch (FileNotFoundException ex)
         {
-            _fileExistenceCache[path] = false;
+            SetFileExistenceCache(path, false);
             throw new StorageException(StorageErrorKind.NotFound, $"No object at '{container}/{key}'.", ex);
         }
         catch (DirectoryNotFoundException ex)
@@ -263,4 +263,13 @@ public class LocalFileStorageProvider : IStorageProvider
 
     private string ResolvePath(string container, string key) =>
         LocalFilePathResolver.ResolveContainedFast(_normalizedRootPath, _rootPathWithSeparator, container, key);
+
+    private void SetFileExistenceCache(string path, bool exists)
+    {
+        if (_fileExistenceCache.Count >= _options.FileExistenceCacheCapacity)
+        {
+            _fileExistenceCache.Clear();
+        }
+        _fileExistenceCache[path] = exists;
+    }
 }

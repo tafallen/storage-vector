@@ -54,6 +54,12 @@ public abstract class StorageOptionsBase
     /// </summary>
     public int BufferSize { get; set; } = 65536;
 
+    /// <summary>
+    /// Maximum capacity (number of entries) for the local file existence cache (used only when Provider is "LocalFile").
+    /// Prevents unbounded memory growth. Defaults to 10000.
+    /// </summary>
+    public int FileExistenceCacheCapacity { get; set; } = 10000;
+
     // ── AWS S3 ───────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -101,6 +107,7 @@ public abstract class StorageOptionsBase
         PublicBaseUrl = other.PublicBaseUrl;
         LocalFileDownloadRoute = other.LocalFileDownloadRoute;
         BufferSize = other.BufferSize;
+        FileExistenceCacheCapacity = other.FileExistenceCacheCapacity;
         AwsRegion = other.AwsRegion;
         AwsAccessKeyId = other.AwsAccessKeyId;
         AwsSecretAccessKey = other.AwsSecretAccessKey;

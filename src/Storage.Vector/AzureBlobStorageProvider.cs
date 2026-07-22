@@ -9,7 +9,7 @@ namespace Storage.Vector;
 /// <summary>
 /// A storage provider implementation that uses Azure Blob Storage.
 /// </summary>
-public class AzureBlobStorageProvider : IStorageProvider
+public class AzureBlobStorageProvider : IStorageProvider, IDisposable
 {
     /// <summary>
     /// Caps how long a presigned SAS URL can grant unauthenticated access to a blob (currently 1 hour).
@@ -19,7 +19,7 @@ public class AzureBlobStorageProvider : IStorageProvider
     private readonly BlobServiceClient _service;
     private readonly StorageOptions _options;
     private readonly System.Threading.SemaphoreSlim _keySemaphore = new(1, 1);
-    private UserDelegationKey? _cachedUserDelegationKey;
+    private volatile UserDelegationKey? _cachedUserDelegationKey;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AzureBlobStorageProvider"/> class.
@@ -30,6 +30,15 @@ public class AzureBlobStorageProvider : IStorageProvider
     {
         _service = service;
         _options = options.Value;
+    }
+
+    /// <summary>
+    /// Disposes managed resources used by the <see cref="AzureBlobStorageProvider"/>.
+    /// </summary>
+    public void Dispose()
+    {
+        _keySemaphore.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private async Task<UserDelegationKey> GetUserDelegationKeyCachedAsync(DateTimeOffset now, CancellationToken ct)

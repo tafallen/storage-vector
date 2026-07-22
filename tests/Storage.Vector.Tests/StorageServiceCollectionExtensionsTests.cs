@@ -138,5 +138,93 @@ public class StorageServiceCollectionExtensionsTests
         Assert.IsType<LocalFileStorageProvider>(secondary);
         Assert.NotSame(primary, secondary);
     }
+
+    [Fact]
+    public void AddStorageProvider_ProviderIsS3_RegistersAwsS3StorageProvider()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "S3",
+            ["Storage:Container"] = "my-bucket",
+            ["Storage:AwsRegion"] = "eu-west-2",
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddStorageProvider(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var storageProvider = provider.GetRequiredService<IStorageProvider>();
+        Assert.IsType<AwsS3StorageProvider>(storageProvider);
+    }
+
+    [Fact]
+    public void AddStorageProvider_UnrecognizedProvider_ThrowsInvalidOperationException()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "UnrecognizedEngine",
+        }).Build();
+
+        var services = new ServiceCollection();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddStorageProvider(configuration));
+        Assert.Contains("Invalid storage provider 'UnrecognizedEngine'", ex.Message);
+    }
+
+    [Fact]
+    public void AddStorageProvider_SyncEnabledIsTrue_AutomaticallyRegistersSecondaryKey()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "LocalFile",
+            ["Storage:Container"] = "famtree-media",
+            ["Storage:RootPath"] = "/data/media",
+            ["Storage:SigningKey"] = "key",
+            ["Storage:PublicBaseUrl"] = "http://localhost:8080",
+            ["Storage:SyncEnabled"] = "true",
+            ["Storage:Secondary:Provider"] = "LocalFile",
+            ["Storage:Secondary:Container"] = "secondary-media",
+            ["Storage:Secondary:RootPath"] = "/data/secondary",
+            ["Storage:Secondary:SigningKey"] = "key2",
+            ["Storage:Secondary:PublicBaseUrl"] = "http://localhost:8081",
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddStorageProvider(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var secondary = provider.GetKeyedService<IStorageProvider>(StorageServiceCollectionExtensions.SecondaryProviderKey);
+        Assert.NotNull(secondary);
+        Assert.IsType<LocalFileStorageProvider>(secondary);
+    }
+
+    [Fact]
+    public void AddSecondaryStorageProvider_ProviderIsS3_RegistersKeyedAwsS3StorageProvider()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Secondary:Provider"] = "S3",
+            ["Storage:Secondary:Container"] = "secondary-bucket",
+            ["Storage:Secondary:AwsRegion"] = "us-east-1",
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddSecondaryStorageProvider(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var secondary = provider.GetRequiredKeyedService<IStorageProvider>(StorageServiceCollectionExtensions.SecondaryProviderKey);
+        Assert.IsType<AwsS3StorageProvider>(secondary);
+    }
+
+    [Fact]
+    public void UsesAwsS3Provider_ReturnsTrueForS3CaseInsensitive()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "s3",
+        }).Build();
+
+        Assert.True(StorageServiceCollectionExtensions.UsesAwsS3Provider(config));
+    }
 }
 

@@ -20,7 +20,7 @@ namespace Storage.Vector;
 /// <see cref="MaxPresignedUrlExpiry" /> (1 hour) to match the behaviour of the other providers.
 /// </para>
 /// </remarks>
-public class AwsS3StorageProvider : IStorageProvider
+public class AwsS3StorageProvider : IStorageProvider, IDisposable
 {
     /// <summary>
     /// Caps how long a presigned URL can grant unauthenticated access to an S3 object (currently 1 hour).
@@ -39,6 +39,15 @@ public class AwsS3StorageProvider : IStorageProvider
     {
         _s3 = s3;
         _options = options.Value;
+    }
+
+    /// <summary>
+    /// Disposes managed resources used by the <see cref="AwsS3StorageProvider" />.
+    /// </summary>
+    public void Dispose()
+    {
+        _s3.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     // The configured Container property is the S3 bucket name.

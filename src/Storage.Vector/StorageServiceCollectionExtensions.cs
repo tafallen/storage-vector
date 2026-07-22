@@ -125,23 +125,34 @@ public static class StorageServiceCollectionExtensions
     /// <summary>
     /// Dynamically registers the primary storage provider based on configuration.
     /// Supported values for <c>Storage:Provider</c> are <c>"LocalFile"</c>, <c>"S3"</c>, and <c>"AzureBlob"</c> (default).
+    /// Throws <see cref="InvalidOperationException"/> if an unrecognized provider name is specified.
+    /// If <c>Storage:SyncEnabled</c> is <c>true</c>, automatically registers the secondary storage provider as well.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">The configuration instance.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
-        if (UsesLocalFileProvider(configuration))
+        var providerStr = configuration[$"{StorageOptions.SectionName}:Provider"];
+        var kind = ParseProviderKind(providerStr);
+
+        switch (kind)
         {
-            services.AddLocalFileStorageProvider(configuration);
+            case StorageProviderKind.LocalFile:
+                services.AddLocalFileStorageProvider(configuration);
+                break;
+            case StorageProviderKind.S3:
+                services.AddAwsS3StorageProvider(configuration);
+                break;
+            case StorageProviderKind.AzureBlob:
+            default:
+                services.AddAzureBlobStorageProvider(configuration);
+                break;
         }
-        else if (UsesAwsS3Provider(configuration))
+
+        if (string.Equals(configuration[$"{StorageOptions.SectionName}:SyncEnabled"], "true", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddAwsS3StorageProvider(configuration);
-        }
-        else
-        {
-            services.AddAzureBlobStorageProvider(configuration);
+            services.AddSecondaryStorageProvider(configuration);
         }
 
         return services;
@@ -157,17 +168,21 @@ public static class StorageServiceCollectionExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddSecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
     {
-        if (UsesLocalFileProvider(configuration, SecondaryStorageOptions.SectionName))
+        var providerStr = configuration[$"{SecondaryStorageOptions.SectionName}:Provider"];
+        var kind = ParseProviderKind(providerStr);
+
+        switch (kind)
         {
-            services.AddLocalFileSecondaryStorageProvider(configuration);
-        }
-        else if (UsesAwsS3Provider(configuration, SecondaryStorageOptions.SectionName))
-        {
-            services.AddAwsS3SecondaryStorageProvider(configuration);
-        }
-        else
-        {
-            services.AddAzureBlobSecondaryStorageProvider(configuration);
+            case StorageProviderKind.LocalFile:
+                services.AddLocalFileSecondaryStorageProvider(configuration);
+                break;
+            case StorageProviderKind.S3:
+                services.AddAwsS3SecondaryStorageProvider(configuration);
+                break;
+            case StorageProviderKind.AzureBlob:
+            default:
+                services.AddAzureBlobSecondaryStorageProvider(configuration);
+                break;
         }
 
         return services;
@@ -275,6 +290,25 @@ public static class StorageServiceCollectionExtensions
         (string.IsNullOrWhiteSpace(keyId) && string.IsNullOrWhiteSpace(secretKey)) ||
         (!string.IsNullOrWhiteSpace(keyId) && !string.IsNullOrWhiteSpace(secretKey));
 
+    private static StorageProviderKind ParseProviderKind(string? providerName)
+    {
+        if (string.IsNullOrWhiteSpace(providerName) || string.Equals(providerName, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+        {
+            return StorageProviderKind.AzureBlob;
+        }
+        if (string.Equals(providerName, "LocalFile", StringComparison.OrdinalIgnoreCase))
+        {
+            return StorageProviderKind.LocalFile;
+        }
+        if (string.Equals(providerName, "S3", StringComparison.OrdinalIgnoreCase))
+        {
+            return StorageProviderKind.S3;
+        }
+
+        throw new InvalidOperationException(
+            $"Invalid storage provider '{providerName}'. Supported providers are 'AzureBlob', 'LocalFile', and 'S3'.");
+    }
+
     private static bool IsValidConnectionString(string? connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -282,14 +316,9 @@ public static class StorageServiceCollectionExtensions
             return false;
         }
 
-        try
-        {
-            _ = new BlobServiceClient(connectionString);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
+        return string.Equals(connectionString, "UseDevelopmentStorage=true", StringComparison.OrdinalIgnoreCase) ||
+               connectionString.Contains("AccountName=", StringComparison.OrdinalIgnoreCase) ||
+               connectionString.Contains("BlobEndpoint=", StringComparison.OrdinalIgnoreCase) ||
+               connectionString.Contains("DefaultEndpointsProtocol=", StringComparison.OrdinalIgnoreCase);
     }
 }
