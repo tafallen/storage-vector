@@ -36,6 +36,30 @@ public interface IStorageProvider
     Task<Stream> GetObjectAsync(string container, string key, CancellationToken ct);
 
     /// <summary>
+    /// Retrieves a partial range download stream for the specified object starting at <paramref name="offset"/>.
+    /// </summary>
+    /// <param name="container">The target container/directory name.</param>
+    /// <param name="key">The unique file key/name.</param>
+    /// <param name="offset">The starting byte offset (0-based).</param>
+    /// <param name="length">The optional number of bytes to retrieve. If null, reads to the end of the object.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>A stream containing the requested byte range. Callers are responsible for disposing of the stream.</returns>
+    Task<Stream> GetObjectAsync(string container, string key, long offset, long? length = null, CancellationToken ct = default)
+    {
+        return GetObjectRangeFallbackAsync(this, container, key, offset, length, ct);
+
+        static async Task<Stream> GetObjectRangeFallbackAsync(IStorageProvider provider, string container, string key, long offset, long? length, CancellationToken ct)
+        {
+            var stream = await provider.GetObjectAsync(container, key, ct).ConfigureAwait(false);
+            if (offset > 0 && stream.CanSeek)
+            {
+                stream.Seek(offset, SeekOrigin.Begin);
+            }
+            return stream;
+        }
+    }
+
+    /// <summary>
     /// Deletes the object. This operation is idempotent and will succeed even if the file is not found.
     /// </summary>
     /// <param name="container">The target container/directory name.</param>

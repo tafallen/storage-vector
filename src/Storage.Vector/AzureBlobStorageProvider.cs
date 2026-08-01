@@ -169,6 +169,23 @@ public class AzureBlobStorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<Stream> GetObjectAsync(string container, string key, long offset, long? length = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var blobClient = _service.GetBlobContainerClient(container).GetBlobClient(key);
+            var range = new Azure.HttpRange(offset, length);
+            var options = new Azure.Storage.Blobs.Models.BlobDownloadOptions { Range = range };
+            var response = await blobClient.DownloadStreamingAsync(options, cancellationToken: ct);
+            return response.Value.Content;
+        }
+        catch (RequestFailedException ex)
+        {
+            throw StorageException.FromAzureException(ex);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         try

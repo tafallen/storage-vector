@@ -147,6 +147,35 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    public async Task<Stream> GetObjectAsync(string container, string key, long offset, long? length = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var request = new GetObjectRequest
+            {
+                BucketName = BucketName,
+                Key = ObjectKey(container, key),
+            };
+
+            if (length.HasValue)
+            {
+                request.ByteRange = new Amazon.S3.Model.ByteRange(offset, offset + length.Value - 1);
+            }
+            else if (offset > 0)
+            {
+                request.ByteRange = new Amazon.S3.Model.ByteRange(offset, long.MaxValue);
+            }
+
+            var response = await _s3.GetObjectAsync(request, ct);
+            return response.ResponseStream;
+        }
+        catch (AmazonS3Exception ex)
+        {
+            throw StorageException.FromAwsException(ex);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         try

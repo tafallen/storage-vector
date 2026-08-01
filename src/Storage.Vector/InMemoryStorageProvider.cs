@@ -94,6 +94,25 @@ public sealed class InMemoryStorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    public Task<Stream> GetObjectAsync(string container, string key, long offset, long? length = null, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(container);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+
+        ct.ThrowIfCancellationRequested();
+
+        if (!_store.TryGetValue((container, key), out var entry))
+        {
+            throw new StorageException(StorageErrorKind.NotFound, $"Object '{container}/{key}' was not found in memory.");
+        }
+
+        int start = (int)Math.Min(offset, entry.Content.Length);
+        int count = length.HasValue ? (int)Math.Min(length.Value, entry.Content.Length - start) : entry.Content.Length - start;
+
+        return Task.FromResult<Stream>(new MemoryStream(entry.Content, start, count, writable: false));
+    }
+
+    /// <inheritdoc />
     public Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(container);

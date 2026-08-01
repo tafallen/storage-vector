@@ -129,7 +129,62 @@ public class LocalFileStorageProvider : IStorageProvider
         {
             throw new StorageException(StorageErrorKind.NotFound, $"No container or object at '{container}/{key}'.", ex);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new StorageException(StorageErrorKind.AccessDenied, $"Access denied for '{container}/{key}'.", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new StorageException(StorageErrorKind.Unavailable, $"Could not read object '{container}/{key}'.", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<Stream> GetObjectAsync(string container, string key, long offset, long? length = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var path = ResolvePath(container, key);
+
+        try
+        {
+            var fileStream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: _options.BufferSize,
+                useAsync: true);
+
+            if (offset > 0)
+            {
+                fileStream.Seek(offset, SeekOrigin.Begin);
+            }
+
+            SetFileExistenceCache(path, true);
+
+            Stream resultStream = fileStream;
+            if (length.HasValue)
+            {
+                resultStream = new BoundedStream(fileStream, length.Value);
+            }
+
+            return Task.FromResult(resultStream);
+        }
+        catch (FileNotFoundException ex)
+        {
+            SetFileExistenceCache(path, false);
+            throw new StorageException(StorageErrorKind.NotFound, $"No object at '{container}/{key}'.", ex);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new StorageException(StorageErrorKind.NotFound, $"No container or object at '{container}/{key}'.", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new StorageException(StorageErrorKind.AccessDenied, $"Access denied for '{container}/{key}'.", ex);
+        }
+        catch (Exception ex)
         {
             throw new StorageException(StorageErrorKind.Unavailable, $"Could not read object '{container}/{key}'.", ex);
         }
@@ -273,6 +328,69 @@ public class LocalFileStorageProvider : IStorageProvider
             {
                 _createdDirectories.TryAdd(dir, true);
             }
+        }
+    }
+
+    private sealed class BoundedStream : Stream
+    {
+        private readonly Stream _baseStream;
+        private readonly long _length;
+        private long _bytesRead;
+
+        public BoundedStream(Stream baseStream, long length)
+        {
+            _baseStream = baseStream;
+            _length = length;
+        }
+
+        public override bool CanRead => _baseStream.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => Math.Min(_length, _baseStream.Length - _baseStream.Position);
+        public override long Position
+        {
+            get => _bytesRead;
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            long remaining = _length - _bytesRead;
+            if (remaining <= 0) return 0;
+            int toRead = (int)Math.Min(count, remaining);
+            int read = _baseStream.Read(buffer, offset, toRead);
+            _bytesRead += read;
+            return read;
+        }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            long remaining = _length - _bytesRead;
+            if (remaining <= 0) return 0;
+            int toRead = (int)Math.Min(count, remaining);
+            int read = await _baseStream.ReadAsync(buffer, offset, toRead, cancellationToken).ConfigureAwait(false);
+            _bytesRead += read;
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            long remaining = _length - _bytesRead;
+            if (remaining <= 0) return 0;
+            int toRead = (int)Math.Min(buffer.Length, remaining);
+            int read = await _baseStream.ReadAsync(buffer.Slice(0, toRead), cancellationToken).ConfigureAwait(false);
+            _bytesRead += read;
+            return read;
+        }
+
+        public override void Flush() => _baseStream.Flush();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _baseStream.Dispose();
+            base.Dispose(disposing);
         }
     }
 }

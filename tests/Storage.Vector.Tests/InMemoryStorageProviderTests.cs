@@ -36,6 +36,23 @@ public class InMemoryStorageProviderTests
     }
 
     [Fact]
+    public async Task GetObjectAsync_RangeDownload_Succeeds()
+    {
+        using var provider = new InMemoryStorageProvider();
+        var content = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        using var data = new MemoryStream(Encoding.UTF8.GetBytes(content));
+
+        await provider.PutObjectAsync(TestContainer, TestKey, data, "text/plain", CancellationToken.None);
+
+        // Download range offset 10, length 5 => "ABCDE"
+        using var rangeStream = await provider.GetObjectAsync(TestContainer, TestKey, offset: 10, length: 5, CancellationToken.None);
+        using var reader = new StreamReader(rangeStream, Encoding.UTF8);
+        var slice = await reader.ReadToEndAsync();
+
+        Assert.Equal("ABCDE", slice);
+    }
+
+    [Fact]
     public async Task GetObjectAsync_NotFound_ThrowsStorageException()
     {
         using var provider = new InMemoryStorageProvider();
