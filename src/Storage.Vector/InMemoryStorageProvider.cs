@@ -74,6 +74,14 @@ public sealed class InMemoryStorageProvider : IStorageProvider, IDisposable
         _store[(container, key)] = entry;
         _containers.TryAdd(container, true);
 
+        using var activity = StorageDiagnostics.ActivitySource.StartActivity("PutObject");
+        activity?.SetTag("storage.container", container);
+        activity?.SetTag("storage.key", key);
+        activity?.SetTag("storage.bytes", bytes.Length);
+
+        StorageDiagnostics.BytesUploaded.Add(bytes.Length);
+        StorageDiagnostics.OperationsCount.Add(1);
+
         return string.Create(CultureInfo.InvariantCulture, $"{now.Ticks:x}-{bytes.Length:x}");
     }
 
@@ -89,6 +97,14 @@ public sealed class InMemoryStorageProvider : IStorageProvider, IDisposable
         {
             throw new StorageException(StorageErrorKind.NotFound, $"Object '{container}/{key}' was not found in memory.");
         }
+
+        using var activity = StorageDiagnostics.ActivitySource.StartActivity("GetObject");
+        activity?.SetTag("storage.container", container);
+        activity?.SetTag("storage.key", key);
+        activity?.SetTag("storage.bytes", entry.Content.Length);
+
+        StorageDiagnostics.BytesDownloaded.Add(entry.Content.Length);
+        StorageDiagnostics.OperationsCount.Add(1);
 
         return Task.FromResult<Stream>(new MemoryStream(entry.Content, writable: false));
     }
