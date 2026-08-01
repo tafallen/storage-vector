@@ -38,19 +38,18 @@ public static class LocalFilePathResolver
             throw new ArgumentException("Key name cannot be null, empty, or whitespace.", nameof(key));
         }
 
-        // Fast-path: Check if there are directory traversal indicators.
-        // We look for:
-        // - ".." (parent directory traversal)
-        // - ":" (UNC roots, drive letters, alternative streams)
-        // - starting separators (absolute path indicators)
+        if (container.Contains(':', StringComparison.Ordinal) ||
+            key.Contains(':', StringComparison.Ordinal) ||
+            container.StartsWith('/') ||
+            container.StartsWith('\\') ||
+            key.StartsWith('/') ||
+            key.StartsWith('\\'))
+        {
+            throw new StorageException(StorageErrorKind.AccessDenied, $"Key '{key}' or container '{container}' contains invalid root or traversal characters.");
+        }
+
         bool hasTraversals = container.Contains("..", StringComparison.Ordinal) ||
-                             key.Contains("..", StringComparison.Ordinal) ||
-                             container.Contains(':', StringComparison.Ordinal) ||
-                             key.Contains(':', StringComparison.Ordinal) ||
-                             key.StartsWith('/') ||
-                             key.StartsWith('\\') ||
-                             container.StartsWith('/') ||
-                             container.StartsWith('\\');
+                             key.Contains("..", StringComparison.Ordinal);
 
         string resolved;
         if (!hasTraversals)
