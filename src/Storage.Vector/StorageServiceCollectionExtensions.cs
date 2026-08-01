@@ -488,4 +488,21 @@ public static class StorageServiceCollectionExtensions
             throw new InvalidOperationException($"A {slot} storage provider has already been registered in the service collection.");
         }
     }
+
+    /// <summary>
+    /// Adds a health check for the registered <see cref="IStorageProvider"/>.
+    /// </summary>
+    /// <param name="builder">The health checks builder.</param>
+    /// <param name="name">The health check name (defaults to "storage-vector").</param>
+    /// <param name="failureStatus">The failure status (optional).</param>
+    /// <param name="tags">Tags to associate with the health check (optional).</param>
+    /// <returns>The health checks builder for chaining.</returns>
+    public static IHealthChecksBuilder AddStorageProviderHealthCheck(
+        this IHealthChecksBuilder builder,
+        string name = "storage-vector",
+        Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus? failureStatus = null,
+        IEnumerable<string>? tags = null)
+    {
+        return builder.AddCheck<StorageProviderHealthCheck>(name, failureStatus, tags ?? Array.Empty<string>());
+    }
 }
