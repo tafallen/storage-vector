@@ -186,6 +186,36 @@ public class AzureBlobStorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    public async IAsyncEnumerable<StorageObject> ListObjectsAsync(string container, string? prefix = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var containerClient = _service.GetBlobContainerClient(container);
+
+        IAsyncEnumerable<Azure.Storage.Blobs.Models.BlobItem> blobs;
+        try
+        {
+            blobs = containerClient.GetBlobsAsync(
+                traits: Azure.Storage.Blobs.Models.BlobTraits.None,
+                states: Azure.Storage.Blobs.Models.BlobStates.None,
+                prefix: prefix,
+                cancellationToken: ct);
+        }
+        catch (RequestFailedException ex)
+        {
+            throw StorageException.FromAzureException(ex);
+        }
+
+        await foreach (var item in blobs.WithCancellation(ct))
+        {
+            yield return new StorageObject(
+                this,
+                container,
+                item.Name,
+                item.Properties.ContentLength ?? 0,
+                item.Properties.LastModified ?? DateTimeOffset.UtcNow);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         try

@@ -53,6 +53,29 @@ public class InMemoryStorageProviderTests
     }
 
     [Fact]
+    public async Task ListObjectsAsync_FiltersByContainerAndPrefix_ReturnsObjects()
+    {
+        using var provider = new InMemoryStorageProvider();
+        using var data1 = new MemoryStream(new byte[] { 1, 2, 3 });
+        using var data2 = new MemoryStream(new byte[] { 4, 5 });
+        using var data3 = new MemoryStream(new byte[] { 6 });
+
+        await provider.PutObjectAsync(TestContainer, "docs/a.txt", data1, "text/plain", CancellationToken.None);
+        await provider.PutObjectAsync(TestContainer, "docs/b.txt", data2, "text/plain", CancellationToken.None);
+        await provider.PutObjectAsync(TestContainer, "images/pic.png", data3, "image/png", CancellationToken.None);
+
+        var docs = new List<StorageObject>();
+        await foreach (var item in provider.ListObjectsAsync(TestContainer, prefix: "docs/", CancellationToken.None))
+        {
+            docs.Add(item);
+        }
+
+        Assert.Equal(2, docs.Count);
+        Assert.Contains(docs, d => d.Key == "docs/a.txt" && d.Size == 3);
+        Assert.Contains(docs, d => d.Key == "docs/b.txt" && d.Size == 2);
+    }
+
+    [Fact]
     public async Task GetObjectAsync_NotFound_ThrowsStorageException()
     {
         using var provider = new InMemoryStorageProvider();

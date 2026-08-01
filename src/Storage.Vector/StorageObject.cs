@@ -20,20 +20,32 @@ public readonly struct StorageObject : IStorageObject
     public IStorageContainer Container => _container;
 
     /// <summary>
+    /// Gets the size in bytes of the object.
+    /// </summary>
+    public long Size { get; }
+
+    /// <summary>
+    /// Gets the last modified timestamp of the object.
+    /// </summary>
+    public DateTimeOffset LastModified { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="StorageObject"/> struct.
     /// </summary>
-    public StorageObject(IStorageProvider provider, StorageContainer container, string key)
+    public StorageObject(IStorageProvider provider, StorageContainer container, string key, long size = 0, DateTimeOffset? lastModified = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _container = container;
         Key = key ?? throw new ArgumentNullException(nameof(key));
+        Size = size;
+        LastModified = lastModified ?? DateTimeOffset.UtcNow;
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StorageObject"/> struct.
     /// </summary>
-    public StorageObject(IStorageProvider provider, string container, string key)
-        : this(provider, new StorageContainer(provider, container), key)
+    public StorageObject(IStorageProvider provider, string container, string key, long size = 0, DateTimeOffset? lastModified = null)
+        : this(provider, new StorageContainer(provider, container), key, size, lastModified)
     {
     }
 

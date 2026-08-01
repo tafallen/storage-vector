@@ -191,6 +191,38 @@ public class LocalFileStorageProvider : IStorageProvider
     }
 
     /// <inheritdoc />
+    public async IAsyncEnumerable<StorageObject> ListObjectsAsync(string container, string? prefix = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var containerPath = LocalFilePathResolver.ResolveContainedFast(_normalizedRootPath, _rootPathWithSeparator, container, string.Empty).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (!Directory.Exists(containerPath))
+        {
+            yield break;
+        }
+
+        var files = Directory.EnumerateFiles(containerPath, "*", SearchOption.AllDirectories);
+        var containerPrefixLength = containerPath.Length + 1;
+
+        foreach (var file in files)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var relativeKey = file.Substring(containerPrefixLength).Replace('\\', '/');
+            if (!string.IsNullOrEmpty(prefix) && !relativeKey.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var fi = new FileInfo(file);
+            yield return new StorageObject(this, container, relativeKey, fi.Length, fi.LastWriteTimeUtc);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         var path = ResolvePath(container, key);

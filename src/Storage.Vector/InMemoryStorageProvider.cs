@@ -113,6 +113,27 @@ public sealed class InMemoryStorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    public async IAsyncEnumerable<StorageObject> ListObjectsAsync(string container, string? prefix = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(container);
+        ct.ThrowIfCancellationRequested();
+
+        foreach (var kvp in _store)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (string.Equals(kvp.Key.Container, container, StringComparison.Ordinal))
+            {
+                if (string.IsNullOrEmpty(prefix) || kvp.Key.Key.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    yield return new StorageObject(this, container, kvp.Key.Key, kvp.Value.Content.Length, kvp.Value.LastModified);
+                }
+            }
+        }
+
+        await Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(container);

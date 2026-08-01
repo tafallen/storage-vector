@@ -176,6 +176,32 @@ public class AwsS3StorageProvider : IStorageProvider, IDisposable
     }
 
     /// <inheritdoc />
+    public async IAsyncEnumerable<StorageObject> ListObjectsAsync(string container, string? prefix = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var s3Prefix = string.IsNullOrEmpty(prefix) ? $"{container}/" : $"{container}/{prefix}";
+        var request = new ListObjectsV2Request
+        {
+            BucketName = BucketName,
+            Prefix = s3Prefix,
+        };
+
+        var paginator = _s3.Paginators.ListObjectsV2(request);
+        var containerPrefixLength = container.Length + 1;
+
+        await foreach (var response in paginator.Responses.WithCancellation(ct))
+        {
+            if (response.S3Objects == null) continue;
+
+            foreach (var s3Obj in response.S3Objects)
+            {
+                ct.ThrowIfCancellationRequested();
+                var key = s3Obj.Key.Length > containerPrefixLength ? s3Obj.Key.Substring(containerPrefixLength) : s3Obj.Key;
+                yield return new StorageObject(this, container, key, s3Obj.Size ?? 0, s3Obj.LastModified);
+            }
+        }
+    }
+
+    /// <inheritdoc />
     public async Task DeleteObjectAsync(string container, string key, CancellationToken ct)
     {
         try

@@ -60,6 +60,15 @@ public interface IStorageProvider
     }
 
     /// <summary>
+    /// Lists objects in the specified container with streaming pagination.
+    /// </summary>
+    /// <param name="container">The target container/directory name.</param>
+    /// <param name="prefix">An optional key prefix filter.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>An async enumerable sequence of <see cref="StorageObject"/> metadata.</returns>
+    IAsyncEnumerable<StorageObject> ListObjectsAsync(string container, string? prefix = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes the object. This operation is idempotent and will succeed even if the file is not found.
     /// </summary>
     /// <param name="container">The target container/directory name.</param>
