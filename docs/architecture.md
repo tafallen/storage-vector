@@ -109,9 +109,35 @@ classDiagram
         +EnsureContainerExistsAsync(...) Task
     }
 
+    class InMemoryStorageProvider {
+        -ConcurrentDictionary _store
+        +PutObjectAsync(...) Task~string~
+        +GetObjectAsync(...) Task~Stream~
+        +DeleteObjectAsync(...) Task
+        +GetPresignedUrlAsync(...) Task~Uri~
+        +ListObjectsAsync(...) IAsyncEnumerable~StorageObject~
+        +Clear() void
+    }
+
+    class StorageDiagnostics {
+        <<static>>
+        +ActivitySource ActivitySource
+        +Meter Meter
+        +BytesUploaded Counter~long~
+        +BytesDownloaded Counter~long~
+        +OperationsCount Counter~long~
+    }
+
+    class StorageProviderHealthCheck {
+        -IStorageProvider _provider
+        -StorageOptions _options
+        +CheckHealthAsync(...) Task~HealthCheckResult~
+    }
+
     IStorageProvider <|.. AzureBlobStorageProvider
     IStorageProvider <|.. LocalFileStorageProvider
     IStorageProvider <|.. AwsS3StorageProvider
+    IStorageProvider <|.. InMemoryStorageProvider
     IStorageContainer <|.. StorageContainer
     IStorageObject <|.. StorageObject
     StorageContainer ..> StorageObject : Resolves
@@ -123,18 +149,21 @@ classDiagram
 
 ## 3. Detailed Component Descriptions
 
-### A. Abstractions
-- **`IStorageProvider`**: The unified interface for uploading, downloading, deleting, and presigning objects. It hides the underlying directory structure or storage account details from callers.
-- **`StorageException` & `StorageErrorKind`**: Direct exceptions from Azure SDK (e.g. `RequestFailedException`) or filesystem I/O (e.g. `UnauthorizedAccessException`, `FileNotFoundException`) are caught and translated into `StorageException` with a standard `StorageErrorKind` (e.g. `NotFound`, `AccessDenied`, `Transient`, `Unknown`).
+### A. Abstractions & Observability
+- **`IStorageProvider`**: The unified interface for uploading, downloading (full and byte-range), streaming object enumeration (`ListObjectsAsync`), deleting, and presigning objects. It hides underlying directory structures or storage account APIs from callers.
+- **`StorageException` & `StorageErrorKind`**: Direct exceptions from Azure SDK (e.g. `RequestFailedException`), AWS SDK (`AmazonS3Exception`), or filesystem I/O (`UnauthorizedAccessException`, `FileNotFoundException`) are translated into `StorageException` with a standard `StorageErrorKind` (`NotFound`, `AccessDenied`, `Unavailable`, `Unknown`).
+- **`StorageDiagnostics`**: Provides native OpenTelemetry `ActivitySource` tracing ("Storage.Vector") and `Meter` metrics ("Storage.Vector") with counters tracking `BytesUploaded`, `BytesDownloaded`, and `OperationsCount`.
+- **`StorageProviderHealthCheck`**: An ASP.NET Core `IHealthCheck` implementation that probes container readiness and permissions via `EnsureContainerExistsAsync`.
 
 ### B. Local Filesystem Components
-- **`LocalFileStorageProvider`**: Manages reading and writing files under a defined root path. To optimize file operations, it pre-caches normalized base path references (eliminating redundant `Path.GetFullPath` root checks), manages a thread-safe directory creation cache (avoiding repeated metadata system checks on uploads), and utilizes a thread-safe local file existence cache to bypass disk I/O when generating presigned download URLs.
-- **`LocalFilePathResolver`**: Implements path-traversal containment checks. It supports both standard checking and an optimized fast-path check that bypasses `Path.GetFullPath` entirely when no relative traversal elements (like `..`, `:`, or starting separators) are detected.
-- **`LocalFileUrlSigner`**: Signs download URLs using HMAC-SHA256 with a pre-encoded private key, incorporating expiration timestamps. It leverages stateless `.NET 8` cryptographic APIs (`HMACSHA256.HashData`) and zero-allocation span formatting to sign and verify URLs without heap allocations.
+- **`LocalFileStorageProvider`**: Manages reading and writing files under a defined root path. Supports byte-range downloads via `BoundedStream`. Pre-caches normalized base path references, manages a thread-safe directory creation cache, and utilizes a local file existence cache to bypass disk I/O when generating presigned URLs.
+- **`LocalFilePathResolver`**: Implements cross-platform path-traversal containment checks. It validates against colons (`:`), drive letters, and leading path separators on all operating systems (Windows, Linux, macOS), and optimizes standard subpath joins using `Path.Join` with `ReadOnlySpan<char>`.
+- **`LocalFileUrlSigner`**: Signs download URLs using HMAC-SHA256 with a pre-encoded private key, incorporating expiration timestamps. Uses stateless `.NET 8` cryptographic APIs (`HMACSHA256.HashData`) and zero-allocation span formatting.
 
-### C. Cloud Provider Components
-- **`AzureBlobStorageProvider`**: Wraps the Azure SDK's `BlobServiceClient`. It handles blob operations, SAS token generation, and maps Azure exceptions to `StorageException`. When running under Entra ID token-based authentication, it implements a thread-safe sliding cache for Azure's `UserDelegationKey` using a Semaphore lock to eliminate redundant network roundtrips to Azure storage for key fetching.
-- **`AwsS3StorageProvider`**: Wraps `IAmazonS3` from the AWS SDK. Uses a single configured S3 bucket (`StorageOptions.Container`) where the `container` method argument becomes a key prefix (`{container}/{key}`). Supports explicit credentials or the ambient IAM credential chain. `VerifyPresignedUrl` decodes SigV4 `X-Amz-Date` + `X-Amz-Expires` parameters to check expiry without making a network call. LocalStack and MinIO are supported via `AwsServiceUrl` and `AwsForcePathStyle`.
+### C. Cloud & In-Memory Provider Components
+- **`AzureBlobStorageProvider`**: Wraps Azure SDK's `BlobServiceClient`. Handles blob operations, byte-range downloads (`HttpRange`), `GetBlobsAsync` streaming pagination, SAS token generation, and maps Azure exceptions to `StorageException`. Implements a thread-safe sliding cache for Azure's `UserDelegationKey`.
+- **`AwsS3StorageProvider`**: Wraps `IAmazonS3` from the AWS SDK. Uses single-bucket mode (`StorageOptions.Container`) where the `container` method argument becomes a key prefix (`{container}/{key}`). Supports byte-range downloads (`ByteRange`) and `ListObjectsV2Paginator` streaming enumeration. LocalStack, MinIO, and Cloudflare R2 are supported via `AwsServiceUrl` and `AwsForcePathStyle`.
+- **`InMemoryStorageProvider`**: Thread-safe, in-memory `IStorageProvider` backed by `ConcurrentDictionary`. Features HMAC-SHA256 presigned URL simulation, range slicing, `ListObjectsAsync` filtering, and `Clear()`/`Count` helpers for unit testing and local development.
 
 ### D. Fluent Interface Layer
 - **`IStorageContainer` & `IStorageObject`**: Contextual client contracts representing container-level and object-level boundaries.
