@@ -99,6 +99,80 @@ public static class StorageServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers an S3-compatible Cloudflare R2 storage provider and its configurations.
+    /// Requires <c>Storage:Container</c> (bucket), <c>Storage:AwsAccessKeyId</c>, <c>Storage:AwsSecretAccessKey</c>, and <c>Storage:AwsServiceUrl</c> (https://&lt;account_id&gt;.r2.cloudflarestorage.com).
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddCloudflareR2StorageProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.EnsureNotAlreadyRegistered();
+        services.AddOptions<StorageOptions>()
+            .Bind(configuration.GetSection(StorageOptions.SectionName))
+            .PostConfigure(o =>
+            {
+                o.AwsRegion ??= "auto";
+                o.AwsForcePathStyle = false;
+            })
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Container is required for Cloudflare R2.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AwsServiceUrl), "Storage:AwsServiceUrl is required for Cloudflare R2 (https://<account_id>.r2.cloudflarestorage.com).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AwsAccessKeyId) && !string.IsNullOrWhiteSpace(o.AwsSecretAccessKey), "Storage:AwsAccessKeyId and Storage:AwsSecretAccessKey are required for Cloudflare R2.")
+            .ValidateOnStart();
+
+        services.AddSingleton<IAmazonS3>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
+            return BuildS3Client(options);
+        });
+
+        services.AddSingleton<IStorageProvider>(sp =>
+        {
+            var s3 = sp.GetRequiredService<IAmazonS3>();
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>();
+            return new AwsS3StorageProvider(s3, options, disposeClient: false);
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers an S3-compatible MinIO storage provider and its configurations.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddMinIOStorageProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.EnsureNotAlreadyRegistered();
+        services.AddOptions<StorageOptions>()
+            .Bind(configuration.GetSection(StorageOptions.SectionName))
+            .PostConfigure(o =>
+            {
+                o.AwsRegion ??= "us-east-1";
+                o.AwsForcePathStyle = true;
+            })
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Container), "Storage:Container is required for MinIO.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AwsServiceUrl), "Storage:AwsServiceUrl is required for MinIO (e.g. http://localhost:9000).")
+            .ValidateOnStart();
+
+        services.AddSingleton<IAmazonS3>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>().Value;
+            return BuildS3Client(options);
+        });
+
+        services.AddSingleton<IStorageProvider>(sp =>
+        {
+            var s3 = sp.GetRequiredService<IAmazonS3>();
+            var options = sp.GetRequiredService<IOptions<StorageOptions>>();
+            return new AwsS3StorageProvider(s3, options, disposeClient: false);
+        });
+
+        return services;
+    }
+
+    /// <summary>
     /// Registers the thread-safe InMemory storage provider and its configurations.
     /// </summary>
     /// <param name="services">The service collection.</param>
