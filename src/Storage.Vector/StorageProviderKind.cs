@@ -19,4 +19,9 @@ public enum StorageProviderKind
     /// Amazon Web Services S3 (or S3-compatible endpoints like LocalStack or MinIO).
     /// </summary>
     S3,
+
+    /// <summary>
+    /// Thread-safe in-memory storage engine for unit testing and local development.
+    /// </summary>
+    InMemory,
 }

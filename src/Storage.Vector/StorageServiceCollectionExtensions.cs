@@ -99,6 +99,44 @@ public static class StorageServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the thread-safe InMemory storage provider and its configurations.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">The configuration instance.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddInMemoryStorageProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.EnsureNotAlreadyRegistered();
+
+        services.AddOptions<StorageOptions>()
+            .Bind(configuration.GetSection(StorageOptions.SectionName));
+
+        services.AddSingleton<IStorageProvider, InMemoryStorageProvider>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the thread-safe InMemory storage provider with programmatic options configuration.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureOptions">An optional delegate to configure <see cref="StorageOptions"/>.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddInMemoryStorageProvider(this IServiceCollection services, Action<StorageOptions>? configureOptions = null)
+    {
+        services.EnsureNotAlreadyRegistered();
+
+        if (configureOptions != null)
+        {
+            services.Configure(configureOptions);
+        }
+
+        services.AddSingleton<IStorageProvider, InMemoryStorageProvider>();
+
+        return services;
+    }
+
+    /// <summary>
     /// Helper to check if the configured provider under the default "Storage" section is LocalFile.
     /// </summary>
     /// <param name="configuration">The configuration instance.</param>
@@ -148,6 +186,9 @@ public static class StorageServiceCollectionExtensions
 
         switch (kind)
         {
+            case StorageProviderKind.InMemory:
+                services.AddInMemoryStorageProvider(configuration);
+                break;
             case StorageProviderKind.LocalFile:
                 services.AddLocalFileStorageProvider(configuration);
                 break;
@@ -183,6 +224,9 @@ public static class StorageServiceCollectionExtensions
 
         switch (kind)
         {
+            case StorageProviderKind.InMemory:
+                services.AddInMemorySecondaryStorageProvider(configuration);
+                break;
             case StorageProviderKind.LocalFile:
                 services.AddLocalFileSecondaryStorageProvider(configuration);
                 break;
@@ -194,6 +238,22 @@ public static class StorageServiceCollectionExtensions
                 services.AddAzureBlobSecondaryStorageProvider(configuration);
                 break;
         }
+
+        return services;
+    }
+
+    private static IServiceCollection AddInMemorySecondaryStorageProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.EnsureNotAlreadyRegistered(SecondaryProviderKey);
+
+        services.AddOptions<SecondaryStorageOptions>()
+            .Bind(configuration.GetSection(SecondaryStorageOptions.SectionName));
+
+        services.AddKeyedSingleton<IStorageProvider, InMemoryStorageProvider>(SecondaryProviderKey, (sp, _) =>
+        {
+            var secondaryOptions = sp.GetRequiredService<IOptions<SecondaryStorageOptions>>().Value;
+            return new InMemoryStorageProvider(ToPrimaryShapedOptions(secondaryOptions));
+        });
 
         return services;
     }
@@ -320,9 +380,13 @@ public static class StorageServiceCollectionExtensions
         {
             return StorageProviderKind.S3;
         }
+        if (string.Equals(providerName, "InMemory", StringComparison.OrdinalIgnoreCase))
+        {
+            return StorageProviderKind.InMemory;
+        }
 
         throw new InvalidOperationException(
-            $"Invalid storage provider '{providerName}'. Supported providers are 'AzureBlob', 'LocalFile', and 'S3'.");
+            $"Invalid storage provider '{providerName}'. Supported providers are 'AzureBlob', 'LocalFile', 'S3', and 'InMemory'.");
     }
 
     private static bool IsValidConnectionString(string? connectionString)
