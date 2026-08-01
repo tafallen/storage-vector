@@ -32,6 +32,41 @@ public class LocalFileStorageProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task GetObjectAsync_RangeDownload_ReturnsCorrectSlice()
+    {
+        var provider = CreateProvider();
+        var payload = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        using var data = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(payload));
+
+        await provider.PutObjectAsync("range-container", "file.txt", data, "text/plain", CancellationToken.None);
+
+        using var rangeStream = await provider.GetObjectAsync("range-container", "file.txt", offset: 10, length: 5, CancellationToken.None);
+        using var reader = new StreamReader(rangeStream, System.Text.Encoding.UTF8);
+        var slice = await reader.ReadToEndAsync();
+
+        Assert.Equal("ABCDE", slice);
+    }
+
+    [Fact]
+    public async Task ListObjectsAsync_EnumeratesContainerFiles()
+    {
+        var provider = CreateProvider();
+        using var data1 = new MemoryStream(new byte[] { 1, 2 });
+        using var data2 = new MemoryStream(new byte[] { 3, 4, 5 });
+
+        await provider.PutObjectAsync("list-container", "docs/a.txt", data1, "text/plain", CancellationToken.None);
+        await provider.PutObjectAsync("list-container", "docs/b.txt", data2, "text/plain", CancellationToken.None);
+
+        var list = new List<StorageObject>();
+        await foreach (var item in provider.ListObjectsAsync("list-container", "docs/", CancellationToken.None))
+        {
+            list.Add(item);
+        }
+
+        Assert.Equal(2, list.Count);
+    }
+
+    [Fact]
     public async Task PutObjectAsync_ReturnsNonEmptyString()
     {
         var provider = CreateProvider();

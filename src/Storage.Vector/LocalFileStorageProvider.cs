@@ -195,7 +195,8 @@ public class LocalFileStorageProvider : IStorageProvider
     {
         ct.ThrowIfCancellationRequested();
 
-        var containerPath = LocalFilePathResolver.ResolveContainedFast(_normalizedRootPath, _rootPathWithSeparator, container, string.Empty).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var placeholderPath = LocalFilePathResolver.ResolveContainedFast(_normalizedRootPath, _rootPathWithSeparator, container, "placeholder");
+        var containerPath = Path.GetDirectoryName(placeholderPath)!;
 
         if (!Directory.Exists(containerPath))
         {
