@@ -183,4 +183,33 @@ public class InMemoryStorageProviderTests
         provider.Clear();
         Assert.Equal(0, provider.Count);
     }
+
+    [Fact]
+    public async Task InMemoryStorageProvider_NullOrWhitespaceArguments_ThrowsArgumentException()
+    {
+        using var provider = new InMemoryStorageProvider();
+        using var data = new MemoryStream(new byte[] { 1 });
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.PutObjectAsync("", "key", data, "text/plain", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.PutObjectAsync("container", "", data, "text/plain", CancellationToken.None));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetObjectAsync("", "key", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetObjectAsync("container", "", CancellationToken.None));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetObjectAsync("", "key", 0, 5, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetObjectAsync("container", "", 0, 5, CancellationToken.None));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.DeleteObjectAsync("", "key", CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.DeleteObjectAsync("container", "", CancellationToken.None));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.EnsureContainerExistsAsync("", CancellationToken.None));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetPresignedUrlAsync("", "key", TimeSpan.FromMinutes(5), CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetPresignedUrlAsync("container", "", TimeSpan.FromMinutes(5), CancellationToken.None));
+
+        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        {
+            await foreach (var item in provider.ListObjectsAsync("", null, CancellationToken.None)) { }
+        });
+    }
 }

@@ -39,4 +39,30 @@ public class StorageProviderHealthCheckTests
         Assert.True(report.Entries.ContainsKey("storage-vector"));
         Assert.Equal(HealthStatus.Healthy, report.Entries["storage-vector"].Status);
     }
+
+    [Fact]
+    public void StorageProviderHealthCheck_ConstructorValidation_ThrowsArgumentNullException()
+    {
+        using var provider = new InMemoryStorageProvider();
+        var options = Options.Create(new StorageOptions());
+
+        Assert.Throws<ArgumentNullException>(() => new StorageProviderHealthCheck(null!, options));
+        Assert.Throws<ArgumentNullException>(() => new StorageProviderHealthCheck(provider, null!));
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_FailingProvider_ReturnsUnhealthy()
+    {
+        var mockProvider = new Moq.Mock<IStorageProvider>();
+        mockProvider.Setup(p => p.EnsureContainerExistsAsync(Moq.It.IsAny<string>(), Moq.It.IsAny<CancellationToken>()))
+            .Returns(Task.FromException(new StorageException(StorageErrorKind.Unavailable, "Connection failed")));
+
+        var options = Options.Create(new StorageOptions { Container = "fail-container" });
+        var healthCheck = new StorageProviderHealthCheck(mockProvider.Object, options);
+
+        var result = await healthCheck.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.NotNull(result.Exception);
+    }
 }

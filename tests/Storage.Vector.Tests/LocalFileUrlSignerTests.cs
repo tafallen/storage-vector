@@ -48,7 +48,45 @@ public class LocalFileUrlSignerTests
     public void Verify_MalformedSignature_ReturnsFalseInsteadOfThrowing()
     {
         Assert.False(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", "events/E001/cert.jpg", 1_800_000_000, "not-hex!!"));
+        Assert.False(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", "events/E001/cert.jpg", 1_800_000_000, null!));
+        Assert.False(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", "events/E001/cert.jpg", 1_800_000_000, ""));
+        Assert.False(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", "events/E001/cert.jpg", 1_800_000_000, "1234")); // Too short
+        Assert.False(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", "events/E001/cert.jpg", 1_800_000_000, new string('0', 63) + "Z")); // Invalid char
     }
+
+    [Fact]
+    public void Compute_LargePayload_RentsFromArrayPoolAndComputesSignature()
+    {
+        var longKey = new string('a', 300);
+        var sig = LocalFileUrlSigner.Compute(KeyBytes, "famtree-media", longKey, 1_800_000_000);
+
+        Assert.NotNull(sig);
+        Assert.Equal(64, sig.Length);
+        Assert.True(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", longKey, 1_800_000_000, sig));
+    }
+
+    [Fact]
+    public void Verify_UppercaseHex_ParsesAndVerifiesCorrectly()
+    {
+        var sig = LocalFileUrlSigner.Compute(KeyBytes, "famtree-media", "key.txt", 1_800_000_000);
+        var upperSig = sig.ToUpperInvariant();
+
+        Assert.True(LocalFileUrlSigner.Verify(KeyBytes, "famtree-media", "key.txt", 1_800_000_000, upperSig));
+    }
+
+#pragma warning disable CS0618
+    [Fact]
+    public void Compute_NullArguments_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => LocalFileUrlSigner.Compute(KeyBytes, null!, "key", 100));
+        Assert.Throws<ArgumentNullException>(() => LocalFileUrlSigner.Compute(KeyBytes, "container", null!, 100));
+        Assert.Throws<ArgumentNullException>(() => LocalFileUrlSigner.Compute((string)null!, "container", "key", 100));
+
+        Assert.Throws<ArgumentNullException>(() => LocalFileUrlSigner.Verify(KeyBytes, null!, "key", 100, "0000000000000000000000000000000000000000000000000000000000000000"));
+        Assert.Throws<ArgumentNullException>(() => LocalFileUrlSigner.Verify(KeyBytes, "container", null!, 100, "0000000000000000000000000000000000000000000000000000000000000000"));
+        Assert.Throws<ArgumentNullException>(() => LocalFileUrlSigner.Verify((string)null!, "container", "key", 100, "0000000000000000000000000000000000000000000000000000000000000000"));
+    }
+#pragma warning restore CS0618
 
 #pragma warning disable CS0618
     [Fact]

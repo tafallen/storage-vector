@@ -238,5 +238,63 @@ public class StorageServiceCollectionExtensionsTests
         var ex = Assert.Throws<InvalidOperationException>(() => services.AddStorageProvider(config));
         Assert.Contains("primary storage provider has already been registered", ex.Message);
     }
+
+    [Fact]
+    public void AddStorageProvider_UnknownProvider_ThrowsInvalidOperationException()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "UnknownEngine",
+        }).Build();
+
+        var services = new ServiceCollection();
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddStorageProvider(config));
+        Assert.Contains("Invalid storage provider 'UnknownEngine'", ex.Message);
+    }
+
+    [Fact]
+    public void AddSecondaryStorageProvider_DoubleRegistration_ThrowsInvalidOperationException()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Secondary:Provider"] = "InMemory",
+            ["Storage:Secondary:Container"] = "c2",
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddSecondaryStorageProvider(config);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddSecondaryStorageProvider(config));
+        Assert.Contains("secondary", ex.Message);
+    }
+
+    [Fact]
+    public void AddSecondaryStorageProvider_ProviderIsAzureBlob_RegistersKeyedAzureBlobStorageProvider()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Secondary:Provider"] = "AzureBlob",
+            ["Storage:Secondary:ConnectionString"] = "UseDevelopmentStorage=true",
+            ["Storage:Secondary:Container"] = "sec-azure-bucket",
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddSecondaryStorageProvider(config);
+
+        using var sp = services.BuildServiceProvider();
+        var secondary = sp.GetRequiredKeyedService<IStorageProvider>(StorageServiceCollectionExtensions.SecondaryProviderKey);
+        Assert.IsType<AzureBlobStorageProvider>(secondary);
+    }
+
+    [Fact]
+    public void UsesLocalFileProvider_ReturnsTrueForLocalFileCaseInsensitive()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Storage:Provider"] = "localfile",
+        }).Build();
+
+        Assert.True(StorageServiceCollectionExtensions.UsesLocalFileProvider(config));
+    }
 }
 

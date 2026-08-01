@@ -13,7 +13,7 @@ public class StorageDiagnosticsTests
     [Fact]
     public async Task StorageDiagnostics_ActivitySource_RecordsActivityAndTags()
     {
-        var activities = new List<Activity>();
+        var activities = new System.Collections.Concurrent.ConcurrentBag<Activity>();
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == StorageDiagnostics.ActivitySourceName,

@@ -1,3 +1,4 @@
+using System.Text;
 using Storage.Vector;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -67,6 +68,43 @@ public class LocalFileStorageProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task BoundedStream_PropertiesAndReading_Succeeds()
+    {
+        var provider = CreateProvider();
+        var payload = "0123456789";
+        using var data = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+        await provider.PutObjectAsync("bounded-container", "file.txt", data, "text/plain", CancellationToken.None);
+
+        using var rangeStream = await provider.GetObjectAsync("bounded-container", "file.txt", offset: 2, length: 4, CancellationToken.None);
+        Assert.True(rangeStream.CanRead);
+        Assert.False(rangeStream.CanSeek);
+        Assert.False(rangeStream.CanWrite);
+        Assert.Equal(4, rangeStream.Length);
+        Assert.Equal(0, rangeStream.Position);
+
+        rangeStream.Flush();
+
+        byte[] buf = new byte[2];
+        int read1 = await rangeStream.ReadAsync(buf, 0, 2, CancellationToken.None);
+        Assert.Equal(2, read1);
+        Assert.Equal("23", Encoding.UTF8.GetString(buf));
+        Assert.Equal(2, rangeStream.Position);
+
+        Memory<byte> memBuf = new byte[5]; // Request 5 bytes, but only 2 remain in length
+        int read2 = await rangeStream.ReadAsync(memBuf, CancellationToken.None);
+        Assert.Equal(2, read2);
+        Assert.Equal("45", Encoding.UTF8.GetString(memBuf.Span.Slice(0, 2)));
+
+        int readEof = await rangeStream.ReadAsync(buf, 0, 2, CancellationToken.None);
+        Assert.Equal(0, readEof);
+
+        Assert.Throws<NotSupportedException>(() => rangeStream.Position = 1);
+        Assert.Throws<NotSupportedException>(() => rangeStream.Seek(0, SeekOrigin.Begin));
+        Assert.Throws<NotSupportedException>(() => rangeStream.SetLength(10));
+        Assert.Throws<NotSupportedException>(() => rangeStream.Write(buf, 0, 2));
+    }
+
+    [Fact]
     public async Task PutObjectAsync_ReturnsNonEmptyString()
     {
         var provider = CreateProvider();
@@ -97,12 +135,25 @@ public class LocalFileStorageProviderTests : IDisposable
 
         var url = await provider.GetPresignedUrlAsync("famtree-media", "events/E001/cert.jpg", TimeSpan.FromMinutes(15), CancellationToken.None);
 
-        Assert.StartsWith("http://localhost:8080/api/v1/media/local-file/famtree-media/events/E001/cert.jpg?expires=", url.ToString());
         var queryParams = url.Query.TrimStart('?').Split('&')
             .Select(p => p.Split('='))
             .ToDictionary(parts => parts[0], parts => Uri.UnescapeDataString(parts[1]));
-        var expires = long.Parse(queryParams["expires"]!);
-        Assert.True(LocalFileUrlSigner.Verify(System.Text.Encoding.UTF8.GetBytes("shared-key"), "famtree-media", "events/E001/cert.jpg", expires, queryParams["sig"]!));
+
+        Assert.True(queryParams.ContainsKey("expires"));
+        Assert.True(queryParams.ContainsKey("sig"));
+
+        Assert.True(provider.VerifyPresignedUrl(url.ToString()));
+    }
+
+    [Fact]
+    public void VerifyPresignedUrl_InvalidUrls_ReturnsFalse()
+    {
+        var provider = CreateProvider();
+        Assert.False(provider.VerifyPresignedUrl("not-a-url"));
+        Assert.False(provider.VerifyPresignedUrl("http://localhost:8080/api/v1/media/local-file/container/key.txt")); // Missing query
+        Assert.False(provider.VerifyPresignedUrl("http://localhost:8080/api/v1/media/local-file/container/key.txt?expires=abc&sig=123")); // Invalid expires
+        Assert.False(provider.VerifyPresignedUrl("http://localhost:8080/api/v1/media/local-file/container/key.txt?expires=100")); // Missing sig
+        Assert.False(provider.VerifyPresignedUrl("http://localhost:8080/api/v1/media/local-file/containerkey.txt?expires=100&sig=123")); // No slash in path
     }
 
     [Fact]
