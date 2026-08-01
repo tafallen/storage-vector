@@ -22,12 +22,12 @@ public static class StorageDiagnostics
     /// <summary>
     /// Gets the shared <see cref="ActivitySource"/> instance for tracing.
     /// </summary>
-    public static readonly ActivitySource ActivitySource = new(ActivitySourceName, "1.0.5");
+    public static readonly ActivitySource ActivitySource = new(ActivitySourceName, "1.1.0");
 
     /// <summary>
     /// Gets the shared <see cref="Meter"/> instance for metrics collection.
     /// </summary>
-    public static readonly Meter Meter = new(MeterName, "1.0.5");
+    public static readonly Meter Meter = new(MeterName, "1.1.0");
 
     /// <summary>
     /// Counter tracking total bytes uploaded to storage providers.
